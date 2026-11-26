@@ -31,7 +31,7 @@ npm run build      # production build in dist/
 - **Finishing pass**: ink outlines (edge detection), bloom on the brightest highlights, saturated colour grading and a vignette.
 - **Idle drift**: after a few seconds without input the view floats slowly in a lazy circle.
 - **Ambient sound**: generated waves, wind and a soft pad (no audio files). It starts on the first tap; the speaker button mutes it, and the choice is remembered.
-- **Phones**: half-resolution bloom, one draw call for all particles, and the pixel ratio adjusts automatically if the frame rate drops.
+- **Phones**: the same quality as desktop (up to 2x pixel ratio, 4x MSAA, full-resolution bloom, same water detail and particles). The pixel ratio only steps down (never below 1x) if the GPU is actually too slow; a screen capped at 30 fps (battery saver) keeps full sharpness.
 
 URL options: `?tod=0..4` starts at a time of day (0 Dawn … 4 Night), `?quality=fixed` turns off automatic quality.
 

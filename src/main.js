@@ -20,8 +20,9 @@ const params = new URLSearchParams(location.search);
 
 // --- renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });
-// The water shader is fragment-heavy, so phones start at a lower pixel ratio.
-const maxDpr = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 2);
+// Same sharpness on phones as on desktop: up to 2x (a 3x phone screen gains
+// almost nothing visible above 2x, but would cost over twice the pixels).
+const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
 let pixelRatio = maxDpr;
 renderer.setPixelRatio(pixelRatio);
 renderer.domElement.className = 'scene';
@@ -43,9 +44,9 @@ const lights = [
 ].map(([l, p]) => { if (p) l.position.set(...p); l.userData.base = l.intensity; scene.add(l); return l; });
 
 // --- world ------------------------------------------------------------------
-const ocean = new Ocean({ size: 500, segments: isTouch ? 260 : 340 }); // big enough that the tilted view never reaches its edge
-const particles = new Particles(isTouch ? { glints: 70, petals: 50, specks: 90 } : {});
-const streaks = new WindStreaks(isTouch ? 5 : 7);
+const ocean = new Ocean({ size: 500, segments: 340 }); // big enough that the tilted view never reaches its edge
+const particles = new Particles();
+const streaks = new WindStreaks(7);
 scene.add(ocean.mesh, particles.points, streaks.mesh);
 
 // the tugboat: tap the sea to sail it there
@@ -69,7 +70,7 @@ const seq = new SinkSequence({
 const letter = new Letter({ root: app, seq, hint: seqHint });
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
-const post = new Post(renderer, scene, camera, { mobile: isTouch });
+const post = new Post(renderer, scene, camera);
 const ambience = new Ambience();
 
 const root = document.documentElement;
@@ -265,7 +266,7 @@ new ResizeObserver(resize).observe(app);
 resize();
 
 const quality = new AutoQuality({
-  min: isTouch ? 0.6 : 0.75, max: maxDpr, start: maxDpr, enabled: params.get('quality') !== 'fixed',
+  min: Math.min(1, maxDpr), max: maxDpr, start: maxDpr, enabled: params.get('quality') !== 'fixed',
   onChange: v => { pixelRatio = v; applySize(); },
 });
 
