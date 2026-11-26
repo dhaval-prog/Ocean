@@ -15,14 +15,15 @@ npm run build      # production build in dist/
 
 ## What's here
 
-- **Top view only**: the camera looks straight down. Drag to pan, pinch or scroll to zoom; panning glides to a stop and stays inside the ocean.
-- **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
-- **Touch the sea**: tapping or dragging makes crisp cartoon rings: white foam by day, glowing at night. At night the sea also glows by itself in patches.
-- **Ambient life**: lights drifting up off the water (dusk/night), petals on the wind (dawn/sunset), specks at night, cartoon wind lines.
-- **Finishing pass**: ink outlines (edge detection), bloom on the brightest highlights, saturated colour grading and a vignette.
-- **Idle drift**: after a few seconds without input the view floats slowly in a lazy circle.
+- **Endless top view**: the camera looks straight down at a sea that goes on forever. Drag to pan (flicks glide to a stop), pinch or scroll to zoom toward your fingers or cursor, double-tap to zoom in on a spot (double-tap again when fully in to zoom back out). Past the edge of the play area the view resists and springs back.
+- **Cartoon water**: 3 bold tones per time of day, crisp ink outlines, rounded foam blobs with hollow swirls, little wave marks that pop in and slide away, pop-in star twinkles and flat cloud shadows. The pattern slides with the current instead of boiling.
+- **A cartoon island** with palms, sand, a shallow halo and pulsing surf.
+- **Life on the sea**: schools of fish shadows, seagull shadows gliding over, and leaves drifting with the current.
+- **Touch the sea**: taps make bouncy rings with splash droplets, white by day and glowing at night. At night the outlines glow and the sea pulses by itself.
+- **Ambient extras**: lights drifting up off the water (dusk/night), petals (dawn/sunset), specks at night, curly cartoon wind swirls, bloom on the brightest highlights, colour grading.
+- **Controls**: time of day (Dawn, Day, Sunset, Dusk, Night, or cycle), sea state, foam, twinkles (Glitter) and reef shallows, in a bubbly rounded UI (Fredoka font).
 - **Ambient sound**: generated waves, wind and a soft pad (no audio files). It starts on the first tap; the speaker button mutes it, and the choice is remembered.
-- **Phones**: half-resolution bloom, one draw call for all particles, and the pixel ratio adjusts automatically if the frame rate drops.
+- **Fast on phones**: all water patterns come from one pre-baked noise texture on a single flat quad, half-resolution bloom on phones, one draw call each for particles and sea life, and the pixel ratio adjusts automatically if the frame rate drops.
 
 URL options: `?tod=0..4` starts at a time of day (0 Dawn … 4 Night), `?quality=fixed` turns off automatic quality.
 
@@ -31,18 +32,20 @@ URL options: `?tod=0..4` starts at a time of day (0 Dawn … 4 Night), `?quality
 ```
 src/
   main.js            renderer, camera, lights, loop
-  ocean/Ocean.js     Ocean class: mesh, setTimeOfDay(), storm, reef, getHeightAt(x, z)
-  ocean/shaders.js   GLSL for the water (ported from Ocean_Standalone.html)
+  ocean/Ocean.js     Ocean class: follow(), setTimeOfDay(), storm, foam, glitter, reef, ripples, objects, island
+  ocean/shaders.js   top-down cartoon water shader
+  ocean/noise.js     pre-baked tiling noise texture
   ocean/palettes.js  time-of-day colours + ambient particle presets
   fx/Particles.js    glints, petals, specks (one batch)
-  fx/WindStreaks.js  screen-space wind lines
-  fx/Post.js         bloom + ink outlines + colour grading + vignette
+  fx/SeaLife.js      fish schools, gull shadows, leaves (one batch)
+  fx/WindStreaks.js  curly screen-space wind swirls
+  fx/Post.js         bloom + colour grading + vignette
   audio/Ambience.js  generated waves / wind / music
   core/AutoQuality.js adaptive pixel ratio
-  core/TopDownControls.js top-down pan / zoom camera
+  core/TopDownControls.js top-down pan / zoom / double-tap camera
   ui/controls.js     settings panel
 public/models/       original stylized-ocean.glb / .mtl exports (static, baked colours)
 ```
 
-`ocean.getHeightAt(x, z)` returns the live water height, `ocean.addRipple(x, z)` makes a splash, and `ocean.setObjects([{ x, z, radius }])` draws foam rings around up to 4 floating objects (boats, players).
+`ocean.addRipple(x, z)` makes a splash, `ocean.setObjects([{ x, z, radius }])` draws foam rings around up to 4 floating objects (boats, players), `ocean.setIsland(x, z, radius)` moves the island, and `ocean.getHeightAt(x, z)` gives a gentle bob for floating things.
 For console access, `window.oceanApp` exposes `{ scene, camera, ocean, ... }`.

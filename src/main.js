@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Ocean } from './ocean/Ocean.js';
 import { Particles } from './fx/Particles.js';
 import { WindStreaks } from './fx/WindStreaks.js';
+import { SeaLife } from './fx/SeaLife.js';
 import { Post } from './fx/Post.js';
 import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
@@ -37,10 +38,11 @@ const lights = [
 ].map(([l, p]) => { if (p) l.position.set(...p); l.userData.base = l.intensity; scene.add(l); return l; });
 
 // --- world ------------------------------------------------------------------
-const ocean = new Ocean({ segments: isTouch ? 220 : 300 });
+const ocean = new Ocean();
 const particles = new Particles(isTouch ? { glints: 70, petals: 50, specks: 90 } : {});
-const streaks = new WindStreaks(isTouch ? 5 : 7);
-scene.add(ocean.mesh, particles.points, streaks.mesh);
+const streaks = new WindStreaks(isTouch ? 4 : 6);
+const seaLife = new SeaLife();
+scene.add(ocean.mesh, seaLife.points, particles.points, streaks.mesh);
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
 const ambience = new Ambience();
@@ -89,13 +91,9 @@ window.addEventListener('pointerdown', firstGesture, { once: true });
 window.addEventListener('keydown', firstGesture, { once: true });
 
 // --- touching the water makes ripples (foam by day, glow by night) ---------
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
-const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ocean.base);
 function rippleAt(e, strength) {
-  const r = renderer.domElement.getBoundingClientRect();
-  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  if (ray.ray.intersectPlane(waterPlane, hit) && hit.distanceTo(camera.position) < 90) ocean.addRipple(hit.x, hit.z, strength);
+  const w = controls.screenToWorld(e.clientX, e.clientY);
+  ocean.addRipple(w.x, w.y, strength);
 }
 let pressed = false, lastTrail = 0;
 renderer.domElement.addEventListener('pointerdown', e => { pressed = true; rippleAt(e, 1); });
@@ -170,7 +168,10 @@ renderer.setAnimationLoop(() => {
 
   drift(dt);
   controls.update(dt);
+  const view = controls.viewSize();
+  ocean.follow(controls.center.x, controls.center.z, Math.max(view.w, view.h) * 1.15);
   ocean.update(dt, elapsed);
+  seaLife.update(elapsed, { center: controls.center, ocean, pxPerUnit: (H * pixelRatio) / view.h });
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
   streaks.update(elapsed, ocean.storm, ocean.light);
@@ -182,4 +183,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, seaLife, particles, post, ambience, quality };

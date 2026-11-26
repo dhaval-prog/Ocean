@@ -1,127 +1,167 @@
-// GLSL chunks injected into MeshStandardMaterial via onBeforeCompile.
-// Ported from the original "Stylized Ocean" scene.
+// Top-down cartoon water. One flat quad that follows the camera; every
+// pattern comes from a pre-baked noise texture (see noise.js).
+//
+// Edges and ink lines are anti-aliased with screen-space derivatives, so they
+// stay crisp, never shimmer while panning, and keep the same thickness at any zoom.
 
-export const GLSL_COMMON = /* glsl */ `
+export const WATER_VERT = /* glsl */ `
+varying vec2 vP;
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vP = w.xz;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+
+export const WATER_FRAG = /* glsl */ `
+uniform sampler2D uNoise;
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
-uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
-uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter;
-uniform vec4 uRipples[8]; uniform vec4 uObjects[4];
-varying float vWave;
-float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
-  return mix(mix(oc_hash(i), oc_hash(i+vec2(1,0)), u.x), mix(oc_hash(i+vec2(0,1)), oc_hash(i+vec2(1,1)), u.x), u.y); }
-float oc_fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ v += a*oc_noise(p); p = p*2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }
-float oc_ridge(vec2 p){ return 1.0 - abs(2.0*oc_noise(p) - 1.0); }
-`;
+uniform float uTime; uniform float uFlow; uniform vec2 uWind;
+uniform float uStorm; uniform float uFoam; uniform float uGlitter; uniform float uReef; uniform float uLight;
+uniform vec4 uRipples[8]; uniform vec4 uObjects[4]; uniform vec4 uIsland;
+varying vec2 vP;
 
-// Vertex displacement. Mirrored on the CPU in Ocean.getHeightAt().
-export const GLSL_VERTEX = /* glsl */ `#include <begin_vertex>
-  vec2 pp = position.xz; vLP = pp;
-  float edge = smoothstep(uHalf, uHalf - 1.5, max(abs(pp.x), abs(pp.y)));
-  float amp = edge * (0.5 + 2.2*uStorm);
-  float wsum = (0.05*sin(dot(pp, uWind)*1.4 - uFlow*1.6) + 0.03*sin(dot(pp, vec2(-uWind.y, uWind.x))*2.1 + uFlow*1.1)
-                        + 0.04*uStorm*sin(dot(pp, vec2(0.3, 1.0))*3.3 - uFlow*2.7));
-  vWave = wsum / (0.08 + 0.04*uStorm);   // roughly -1 (trough) … 1 (crest)
-  transformed.y += amp * wsum;`;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float tex(vec2 uv, int ch) { vec4 t = texture2D(uNoise, uv); return ch == 0 ? t.r : ch == 1 ? t.g : ch == 2 ? t.b : t.a; }
 
-export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
+// anti-aliased step: hard cartoon edge, smoothed over ~1 pixel
+float aastep(float th, float v) { float w = max(fwidth(v), 1e-5) * 0.7; return smoothstep(th - w, th + w, v); }
+// ink line on the contour v = th, constant thickness in pixels
+float inkLine(float v, float th, float px) { float d = abs(v - th) / max(fwidth(v), 1e-5); return 1.0 - smoothstep(px - 0.7, px + 0.7, d); }
+// stroke of half-width w (world units) along a distance field d
+float stroke(float d, float w) { float f = max(fwidth(d), 1e-5); return 1.0 - smoothstep(w - f, w + f, d); }
+float backOut(float x) { float c = 1.7; x -= 1.0; return 1.0 + (c + 1.0)*x*x*x + c*x*x; }
+
+void main() {
+  float m = uMix*uMix*(3.0 - 2.0*uMix);
+  vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
+  vec4 fx = mix(uFxA, uFxB, m);
+  float night = fx.z;
+
+  vec2 p = vP, W = uWind, Wp = vec2(-W.y, W.x);
+  vec2 q = vec2(dot(p, W), dot(p, Wp));           // current-aligned coordinates
+  float fl = uFlow;
+
+  // --- water shapes: the pattern slides with the current; a second, slower
+  // layer makes the shapes evolve gently instead of "boiling"
+  vec2 warp = (texture2D(uNoise, (q - vec2(fl*0.55, 0.0))*0.011 + 0.37).ga - 0.5) * 0.22;
+  float n = tex((q - vec2(fl, 0.0))*vec2(0.02, 0.032) + warp, 0)*0.8
+          + tex((q - vec2(fl*0.8, 0.0))*vec2(0.045, 0.07) + 0.5, 1)*0.2;
+
+  // 3 bold tones
+  vec3 deep = pal[1], mid = mix(pal[2], pal[3], 0.35), light = mix(pal[3], pal[4], 0.55);
+  float b1 = aastep(0.42, n), b2 = aastep(0.62, n);
+  vec3 c = mix(mix(deep, mid, b1), light, b2);
+
+  // flat cloud shadows drifting by (daytime)
+  float cs = aastep(0.74, tex(p*0.006 + uTime*vec2(0.0016, 0.0007), 0));
+  c = mix(c, c*vec3(0.8, 0.86, 0.98), cs*0.45*(1.0 - night));
+
+  // reef shallows
+  float rv = length((p - vec2(-10.0, 6.0))*vec2(1.0, 1.3)) + (tex(p*0.02 + 0.3, 1) - 0.5)*4.0;
+  float reef = (1.0 - aastep(5.0, rv)) * uReef, sandbar = (1.0 - aastep(2.6, rv)) * uReef;
+  c = mix(c, mix(pal[3], pal[4], 0.8)*vec3(0.92, 1.08, 1.02), reef);
+  c = mix(c, mix(pal[4], pal[6], 0.5)*vec3(1.15, 1.05, 0.82), sandbar*0.85);
+
+  // --- rounded foam blobs (Wind-Waker style) with a hollow swirl inside
+  float foamAmt = clamp(uFoam + uStorm*0.5, 0.0, 1.0);
+  float fv = tex((q - vec2(fl*1.15, 0.0))*vec2(0.11, 0.17) + warp*0.6 + 0.21, 2)*0.85 + n*0.15;
+  float fth = mix(0.94, 0.8, foamAmt);
+  float foam = aastep(fth, fv) * (1.0 - aastep(fth + 0.05, fv)*0.9);
+
+  // --- cartoon wave marks: little "‿‿" strokes that pop in, slide, fade
+  float marks = 0.0;
   {
-    vec2 p = vWPos.xz; float t = uTime, fl = uFlow;
-    float far = clamp(-(vWPos.z - cameraPosition.z)/uFarScale*0.5 + 0.5, 0.0, 1.0); // 1 = top of the screen
-    // time-of-day sweep: far side changes first, light rolls toward the viewer
-    float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
-    vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
-    vec4 fx = mix(uFxA, uFxB, m);
-
-    vec2 q = vec2(dot(p, uWind), dot(p, vec2(-uWind.y, uWind.x)));
-    vec2 s = vec2(q.x*0.42, q.y*1.25) - vec2(fl*0.22, 0.0);
-    vec2 warp = vec2(oc_fbm(s*0.3 + vec2(fl*0.03, 0.0)), oc_fbm(s*0.3 + 5.2));
-    float n  = oc_fbm(s*0.17 + warp*1.3);
-    float n2 = oc_fbm(s*0.65 + warp*0.9 + 3.0);
-    float v = n + (n2 - 0.5)*0.1;   // low detail term = big, simple cartoon shapes
-
-    float e = 0.008;
-    vec3 c = pal[1];
-    c = mix(c, pal[0], smoothstep(0.38+e, 0.38-e, v) * smoothstep(0.5, 0.62, oc_fbm(s*vec2(0.5,1.6) + 11.0)));
-    c = mix(c, pal[2], smoothstep(0.445-e, 0.445+e, v));
-    c = mix(c, pal[3], smoothstep(0.53-e, 0.53+e, v));
-    c = mix(c, pal[4], smoothstep(0.62-e, 0.62+e, v));
-    // cartoon ink: dark outline where deep meets mid water, crisp white rim on the brightest shapes
-    c = mix(c, pal[0]*0.85, smoothstep(0.007, 0.0, abs(v - 0.445)) * 0.45);
-    c = mix(c, pal[5], smoothstep(0.007, 0.0, abs(v - 0.62)) * 0.6);
-
-    // reef shallows
-    float rd = length((p - vec2(5.0, 3.0))*vec2(1.0, 1.35)) + (oc_fbm(p*0.35 + 50.0) - 0.5)*3.0;
-    float rm = smoothstep(4.6, 2.6, rd)*uReef, core = smoothstep(2.6, 0.6, rd)*uReef;
-    vec3 turq = mix(pal[3], pal[4], 0.6)*vec3(0.88, 1.1, 1.02);
-    vec3 sand = mix(pal[4], pal[6], 0.5)*vec3(1.15, 1.05, 0.82);
-    c = mix(c, turq, rm);
-    c = mix(c, sand, core*0.8);
-    c = mix(c, pal[5], smoothstep(0.2, 0.0, abs(rd - 2.75))*uReef*0.55);
-
-    // foam lines (+ storm, + night bioluminescent pulse & trails)
-    vec2 fs = q*vec2(0.6, 1.9) + vec2(-fl*0.4, 0.0) + warp*1.6;
-    float r1 = oc_ridge(fs), r2 = oc_ridge(fs*1.9 + 7.3 + vec2(-fl*0.3, 0.0));
-    // uFoam: 0 = almost none, 1 = original amount. Storms always add some back.
-    float foam = clamp(uFoam + uStorm*0.5, 0.0, 1.0);
-    float mask = smoothstep(0.42 + (1.0 - foam)*0.12 - uStorm*0.25, 0.6 + (1.0 - foam)*0.1 - uStorm*0.22, oc_fbm(s*0.4 + vec2(fl*0.04, 0.0) + 20.0))
-               * (0.35 + 0.65*smoothstep(0.48, 0.6, v));
-    float lines = max(smoothstep(0.9 + (1.0 - foam)*0.04 - uStorm*0.06, 0.915 + (1.0 - foam)*0.04 - uStorm*0.06, r1),
-                      0.8*foam*smoothstep(0.95 - uStorm*0.05, 0.965 - uStorm*0.05, r2)) * smoothstep(0.25, 0.35, mask) * mix(0.5, 1.0, foam);
-    float trail = 0.0;
-    for (int k = 1; k <= 4; k++) trail += smoothstep(0.88, 0.96, oc_ridge(fs + vec2(float(k)*0.13, 0.0))) * (1.0 - float(k)/5.0);
-    trail *= mask * foam;
-    float pulse = 0.55 + 0.45*sin(t*2.2 + oc_noise(p*0.45)*6.283);
-    c = mix(c, pal[4], smoothstep(0.8, 0.82, r1)*smoothstep(0.25, 0.35, mask)*0.3*foam);
-    c = mix(c, pal[5], lines*0.95);
-    c += pal[5]*(trail*0.22 + lines*pulse*0.7)*fx.z;
-
-
-    // ripples (taps, boats) + foam rings around floating objects.
-    // Daytime: white foam. Night: bioluminescent glow.
-    float rg = 0.0, rf = 0.0;
-    for (int i = 0; i < 8; i++) {
-      vec4 R = uRipples[i]; float age = t - R.z;
-      if (R.w <= 0.0 || age < 0.0 || age > 4.5) continue;
-      float r = length(p - R.xy), wob = 1.0;
-      // crisp cartoon rings: a bold outer ring plus a thinner one following it
-      float fade = smoothstep(4.5, 1.5, age);
-      float ring = (smoothstep(0.16, 0.1, abs(r - age*2.2)) + 0.6*smoothstep(0.09, 0.05, abs(r - age*1.5))) * fade;
-      float core = smoothstep(0.6, 0.5, r) * smoothstep(0.8, 0.0, age);
-      rg += (ring + core*0.9)*R.w*wob; rf += ring*R.w*wob;
+    float C = 3.4;
+    vec2 mq = (q - vec2(fl*1.25, 0.0)) / C;
+    vec2 id = floor(mq), f = (fract(mq) - 0.5)*C;
+    float h = hash(id);
+    if (h < mix(0.22, 0.45, uStorm)) {
+      float ph = fract(uTime*0.22 + h*7.0);
+      float grow = backOut(clamp(ph/0.22, 0.0, 1.0)), fade = 1.0 - smoothstep(0.62, 1.0, ph);
+      vec2 lp = f - (vec2(hash(id + 1.3), hash(id + 2.7)) - 0.5)*1.2;
+      float halfLen = 0.42*grow, R = 0.34;
+      for (int k = 0; k < 2; k++) {
+        vec2 a = lp - vec2(float(k)*0.78 - 0.39, 0.0);
+        float d = abs(length(a - vec2(0.0, R)) - R);
+        float taper = smoothstep(halfLen, halfLen*0.5, abs(a.x)) * step(a.y, R*0.5);
+        marks = max(marks, stroke(d, 0.055) * taper * fade);
+      }
     }
-    for (int i = 0; i < 4; i++) {
-      vec4 O = uObjects[i]; if (O.w <= 0.0) continue;
-      vec2 dv = p - O.xy; float r = length(dv), a = atan(dv.y, dv.x);
-      float wob = 0.12*sin(a*5.0 + t*2.0) + 0.08*sin(a*3.0 - t*1.3);
-      float ring = smoothstep(0.28, 0.0, abs(r - O.z - 0.2 - wob)) * smoothstep(0.3, 0.6, oc_noise(vec2(a*3.0, t*0.8) + O.xy));
-      float wake = smoothstep(O.z*2.5, O.z, r) * 0.3;
-      rf += (ring + wake*0.5)*O.w; rg += (ring + wake)*O.w*0.6;
+  }
+
+  // --- pop-in twinkles (little 4-point stars)
+  float spark = 0.0;
+  {
+    vec2 sp = p*0.9, cell = floor(sp), f = fract(sp) - 0.5;
+    float T = uTime*0.55 + hash(cell)*13.0, ph = fract(T);
+    float on = step(mix(0.985, 0.95, uGlitter), hash(cell + floor(T)*1.7));
+    float s = backOut(clamp(ph/0.3, 0.0, 1.0)) * (1.0 - smoothstep(0.5, 1.0, ph));
+    f -= (vec2(hash(cell + 4.1), hash(cell + 9.2)) - 0.5)*0.4;
+    float g = sqrt(abs(f.x)) + sqrt(abs(f.y));
+    spark = on * (1.0 - aastep(0.3*s + 1e-3, g)) * b1 * fx.x;
+  }
+
+  // --- ripples: overshooting rings + splash droplets (foam by day, glow by night)
+  float rip = 0.0;
+  for (int i = 0; i < 8; i++) {
+    vec4 R = uRipples[i]; float age = uTime - R.z;
+    if (R.w <= 0.0 || age < 0.0 || age > 2.6) continue;
+    float k = clamp(age/1.5, 0.0, 1.0), rad = mix(0.25, 3.0*sqrt(R.w), backOut(k));
+    float fade = 1.0 - smoothstep(1.3, 2.6, age), r = length(p - R.xy);
+    float ring = stroke(abs(r - rad), 0.1*(1.0 - k*0.5)) + 0.7*stroke(abs(r - rad*0.62), 0.06);
+    float drops = 0.0;
+    if (age < 0.75) {
+      for (int j = 0; j < 6; j++) {
+        float an = float(j)*1.047 + hash(R.xy + float(j))*0.6;
+        vec2 dp = R.xy + vec2(cos(an), sin(an))*(0.35 + age*3.4*sqrt(R.w));
+        drops += 1.0 - aastep(0.15*(1.0 - age/0.75) + 1e-3, length(p - dp));
+      }
     }
-    c = mix(c, pal[5], clamp(rf, 0.0, 1.0)*0.75*(1.0 - fx.z*0.5));
-    c += mix(pal[4], pal[5], 0.5)*rg*fx.z*1.5;
+    rip += (ring*fade + drops)*R.w;
+  }
+  for (int i = 0; i < 4; i++) {                      // foam rings around floating objects
+    vec4 O = uObjects[i]; if (O.w <= 0.0) continue;
+    vec2 dv = p - O.xy; float a = atan(dv.y, dv.x);
+    float wob = 0.12*sin(a*5.0 + uTime*2.0) + 0.08*sin(a*3.0 - uTime*1.3);
+    rip += stroke(abs(length(dv) - O.z - 0.25 - wob), 0.1) * O.w;
+  }
+  rip = clamp(rip, 0.0, 1.0);
 
-    // cartoon twinkles: little 4-point stars that pop in and out
-    vec2 sc = p*1.6, cell = floor(sc), f = fract(sc) - 0.5;
-    float st = t*1.2, ph = fract(st);
-    float on = step(mix(0.999, 0.994, uGlitter), oc_hash(cell + floor(st)));
-    float starShape = smoothstep(0.34, 0.3, sqrt(abs(f.x)) + sqrt(abs(f.y))) * sin(ph*3.14159);
-    float sp = on * starShape * smoothstep(0.5, 0.55, v) * fx.x;
-    c = mix(c, pal[8], min(sp*1.4, 1.0));
-    c += pal[8]*sp*fx.z*0.6;
+  // --- compose: foam + marks + ripples in white (glowing at night), ink outlines
+  // day: white foam, dark ink.  night: dim teal foam with glowing outlines
+  vec3 white = mix(pal[5], mix(pal[4], pal[5], 0.35), night);
+  vec3 ink = mix(deep*0.45, pal[5]*1.15, night*0.85);
+  vec3 glow = pal[5] * (1.0 + night*0.3);
+  float px = 1.0;
+  c = mix(c, white, foam);
+  c = mix(c, ink, inkLine(n, 0.42, px)*(1.0 - foam)*0.85);
+  c = mix(c, ink, inkLine(fv, fth, px)*0.9);
+  c = mix(c, glow, max(marks*0.92, rip));
+  c = mix(c, pal[8]*(1.0 + night*0.6), min(spark*1.2, 1.0));
 
-    // flat cartoon cloud shadows drifting across the sea (daytime)
-    float cs = smoothstep(0.56, 0.575, oc_fbm(p*0.035 + vec2(t*0.012, t*0.006) + 40.0));
-    c = mix(c, c*vec3(0.74, 0.8, 0.95), cs*0.55*(1.0 - fx.z));
+  // --- a small cartoon island: grass, palms, sand, shallow halo, surf
+  if (uIsland.w > 0.0) {
+    vec2 ip = p - uIsland.xy;
+    float d = length(ip) - uIsland.z + (tex(ip*0.025 + 0.7, 2) - 0.5)*uIsland.z*0.55;
+    float lit = mix(0.4, 1.0, uLight);
+    vec3 shallow = mix(pal[3], pal[4], 0.75)*vec3(0.95, 1.08, 1.0);
+    c = mix(c, shallow, 1.0 - aastep(1.9, d));
+    float surf = stroke(abs(d - (0.6 + 0.3*sin(uTime*1.4))), 0.12) + 0.6*stroke(abs(d - (1.35 + 0.3*sin(uTime*1.4 - 1.2))), 0.07);
+    c = mix(c, glow, clamp(surf, 0.0, 1.0)*0.9);
+    vec3 sand = vec3(0.98, 0.86, 0.6)*lit, grass = vec3(0.42, 0.78, 0.4)*lit, bush = vec3(0.26, 0.6, 0.32)*lit;
+    c = mix(c, sand, 1.0 - aastep(0.0, d));
+    c = mix(c, grass, 1.0 - aastep(-1.1, d));
+    c = mix(c, bush, (1.0 - aastep(-1.4, d)) * aastep(0.62, tex(ip*0.09 + 0.2, 2)));
+    for (int k = 0; k < 3; k++) {                    // palm crowns
+      vec2 pc = ip - uIsland.z*0.42*vec2(cos(float(k)*2.3 + 0.4), sin(float(k)*2.3 + 0.4));
+      float a = atan(pc.y, pc.x) + uTime*0.05;
+      float pr = length(pc) - 0.95*(0.72 + 0.28*cos(a*6.0));
+      c = mix(c, vec3(0.2, 0.52, 0.28)*lit, 1.0 - aastep(0.0, pr));
+      c = mix(c, deep*0.45, inkLine(pr, 0.0, px)*0.9);
+    }
+    c = mix(c, deep*0.45, (inkLine(d, 0.0, px) + inkLine(d, -1.1, px)*0.7)*0.9);
+  }
 
-    // sky reflection on the far side, deeper up close; storm darkens
-    c = mix(c, pal[9], far*far*0.38);
-    c *= mix(0.84, 1.0, far) * (1.0 - uStorm*0.12);
-
-    // haze into the sky colour toward the horizon, then fade out at the edge
-    float dist = max(abs(vLP.x), abs(vLP.y));
-    c = mix(c, mix(pal[9], pal[1], 0.22), smoothstep(uHalf*0.6, uHalf - uFade*0.3, dist) * 0.9);
-
-    diffuseColor.rgb = c * 0.12;
-    diffuseColor.a = smoothstep(uHalf, uHalf - uFade, dist);
-  }`;
+  c *= 1.0 - uStorm*0.12;
+  gl_FragColor = vec4(c, 1.0);
+}`;

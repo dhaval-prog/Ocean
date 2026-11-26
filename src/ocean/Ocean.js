@@ -1,76 +1,57 @@
 import * as THREE from 'three';
 import { TIMES } from './palettes.js';
-import { GLSL_COMMON, GLSL_VERTEX, GLSL_FRAGMENT } from './shaders.js';
+import { makeNoiseTexture } from './noise.js';
+import { WATER_VERT, WATER_FRAG } from './shaders.js';
 
-// CPU-side noise matching the static base shape of the surface.
-const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
 const sm = t => t * t * (3 - 2 * t);
-function noise(x, y) {
-  const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
-  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
-  return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
-}
-const fbm = (x, y, o = 4) => { let v = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { v += a * noise(x * f, y * f); f *= 2.03; a *= 0.5; } return v; };
-const baseHeight = (x, z) => 0.08 * Math.sin(x * 0.9 + z * 0.35) + 0.05 * Math.sin(-x * 0.4 + z * 1.3) + 0.12 * (fbm(x * 0.35, z * 0.35, 3) - 0.5);
-const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /**
- * A large cartoon ocean surface, viewed from above.
+ * Endless top-down cartoon ocean: one flat quad that follows the camera.
  *
  *   const ocean = new Ocean();
  *   scene.add(ocean.mesh);
+ *   ocean.follow(x, z, size);            // every frame: centre + size of the visible area
  *   ocean.update(dt, elapsed);           // every frame
  *   ocean.setTimeOfDay(2.5);             // 0 Dawn … 4 Night (wraps, blends)
  *   ocean.storm = 0.6;                   // 0 calm … 1 stormy
- *   ocean.foam = 0.35;                   // 0 none … 1 original amount
- *   ocean.getHeightAt(x, z);             // water height for floating objects
+ *   ocean.foam = 0.35;                   // 0 … 1
+ *   ocean.glitter = 0.3;                 // twinkles, 0 … 1
+ *   ocean.addRipple(x, z);               // splash
+ *   ocean.setObjects([{ x, z, radius }]) // foam rings around floating things
+ *   ocean.setIsland(x, z, radius)        // the cartoon island (radius 0 hides it)
  */
 export class Ocean {
-  constructor({ size = 300, segments = 300, base = 1.2, fade = size * 0.2 } = {}) {
-    this.size = size;
+  constructor({ base = 1.2 } = {}) {
     this.base = base;
     this.storm = 0.3;
     this.reef = false;
-    this.foam = 0.35; // 0 … 1 (1 = original look)
-    this.glitter = 0.3; // cartoon twinkles, 0 … 1
+    this.foam = 0.35;
+    this.glitter = 0.3;
     this.flow = 0;
-
-    const geo = new THREE.PlaneGeometry(size, size, segments, segments);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) pos.setY(i, base + baseHeight(pos.getX(i), pos.getZ(i)));
-    geo.computeVertexNormals();
+    this.flowSpeed = 0;
 
     const hex = s => new THREE.Color(s);
     this.uniforms = {
+      uNoise: { value: makeNoiseTexture() },
       uTime: { value: 0 }, uFlow: { value: 0 },
       uWind: { value: new THREE.Vector2(1, 0.35).normalize() },
-      uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 18 },
       uPalA: { value: TIMES[1].pal.map(hex) }, uPalB: { value: TIMES[1].pal.map(hex) },
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
-      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 }, uGlitter: { value: 0.3 },
+      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: this.foam },
+      uGlitter: { value: this.glitter }, uLight: { value: 1 },
       uRipples: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -99, 0)) },
       uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
+      uIsland: { value: new THREE.Vector4(15, -7, 4, 1) },
     };
 
-    const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
-    mat.onBeforeCompile = sh => {
-      Object.assign(sh.uniforms, this.uniforms);
-      sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec2 vLP;' + GLSL_COMMON)
-        .replace('#include <begin_vertex>', GLSL_VERTEX)
-        .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec2 vLP;' + GLSL_COMMON)
-        .replace('#include <color_fragment>', GLSL_FRAGMENT)
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 7.4;');
-    };
-
-    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+      new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: this.uniforms }),
+    );
     this.mesh.name = 'ocean';
     this.mesh.frustumCulled = false;
+    this.mesh.position.y = base;
 
-    // Current blended look, read by the app for sky + lights.
     this.skyColor = new THREE.Color(TIMES[1].pal[9]);
     this.skyTopColor = new THREE.Color();
     this.light = 1;
@@ -89,15 +70,22 @@ export class Ocean {
     U.uPalA.value.forEach((c, m) => c.set(TIMES[i].pal[m]));
     U.uPalB.value.forEach((c, m) => c.set(TIMES[j].pal[m]));
     U.uFxA.value.set(...TIMES[i].fx); U.uFxB.value.set(...TIMES[j].fx);
-    U.uMix.value = k; // the shader eases and sweeps far → near
+    U.uMix.value = k;
     this.skyColor.set(TIMES[i].pal[9]).lerp(this._tmp.set(TIMES[j].pal[9]), e);
     this.skyTopColor.set(TIMES[i].pal[2]).lerp(this._tmp.set(TIMES[j].pal[2]), e).lerp(this.skyColor, 0.55);
     this.light = TIMES[i].light + (TIMES[j].light - TIMES[i].light) * e;
+    U.uLight.value = this.light;
     const L = this.look, A = TIMES[i].ambient, B = TIMES[j].ambient, lerp = (a, b) => a + (b - a) * e;
     for (const key of ['petals', 'specks', 'glints']) L[key] = lerp(A[key], B[key]);
     L.night = lerp(TIMES[i].fx[2], TIMES[j].fx[2]);
     this.timeName = TIMES[Math.round(f) % n].name;
     this.timeOfDay = f;
+  }
+
+  /** Keep the water under the camera. size = width of the visible square area. */
+  follow(x, z, size) {
+    this.mesh.position.set(x, this.base, z);
+    this.mesh.scale.set(size, 1, size);
   }
 
   update(dt, elapsed) {
@@ -106,21 +94,18 @@ export class Ocean {
     U.uStorm.value = this.storm;
     U.uFoam.value = this.foam;
     U.uGlitter.value = this.glitter;
-    this.flow += dt * (0.55 + 1.6 * this.storm);
+    this.flowSpeed = 0.9 + 2.2 * this.storm;     // world units / second along the wind
+    this.flow += dt * this.flowSpeed;
     U.uFlow.value = this.flow;
     U.uReef.value += ((this.reef ? 1 : 0) - U.uReef.value) * Math.min(1, dt * 3);
   }
 
-  /** Splash at (x, z): an expanding ring (foam by day, glow by night). */
   addRipple(x, z, strength = 1) {
     const r = this.uniforms.uRipples.value[this._ripple++ % 8];
     r.set(x, z, this.uniforms.uTime.value, strength);
   }
 
-  /**
-   * Foam rings for floating objects (boats, players). Up to 4.
-   * @param {{x:number, z:number, radius?:number}[]} list
-   */
+  /** @param {{x:number, z:number, radius?:number}[]} list up to 4 */
   setObjects(list) {
     this.uniforms.uObjects.value.forEach((o, i) => {
       const it = list[i];
@@ -128,19 +113,16 @@ export class Ocean {
     });
   }
 
-  /** World-space water height at (x, z): matches the vertex shader. */
+  setIsland(x, z, radius) { this.uniforms.uIsland.value.set(x, z, radius, radius > 0 ? 1 : 0); }
+
+  /** Water height for floating objects: the surface is flat from above, plus a gentle bob. */
   getHeightAt(x, z) {
-    const w = this.uniforms.uWind.value, s = this.storm, fl = this.flow, half = this.size / 2;
-    const edge = smoothstep(half, half - 1.5, Math.max(Math.abs(x), Math.abs(z)));
-    const amp = edge * (0.5 + 2.2 * s);
-    const wave = 0.05 * Math.sin((x * w.x + z * w.y) * 1.4 - fl * 1.6)
-               + 0.03 * Math.sin((-x * w.y + z * w.x) * 2.1 + fl * 1.1)
-               + 0.04 * s * Math.sin((x * 0.3 + z) * 3.3 - fl * 2.7);
-    return this.base + baseHeight(x, z) + amp * wave;
+    return this.base + 0.04 * Math.sin(x * 0.7 + this.flow * 1.3) * Math.cos(z * 0.6 - this.flow);
   }
 
   dispose() {
     this.mesh.geometry.dispose();
     this.mesh.material.dispose();
+    this.uniforms.uNoise.value.dispose();
   }
 }
