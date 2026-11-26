@@ -97,14 +97,14 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float pulse = 0.55 + 0.45*sin(t*2.2 + oc_noise(p*0.45)*6.283);
     c = mix(c, pal[4], smoothstep(0.8, 0.82, r1)*smoothstep(0.25, 0.35, mask)*0.3*foam);
     c = mix(c, pal[5], lines*0.95);
-    c += pal[5]*(trail*0.22 + lines*pulse*0.7)*fx.z;
+    c += pal[5]*(trail*0.08 + lines*pulse*0.12)*fx.z;   // night: soft moonlit foam, no strong glow
 
 
     // drop ripples: crests catch the light, troughs darken; foam by day, glow by night
     // kept faint so the rings sit quietly on the surface
     c *= 1.0 + rH*0.1;
     c = mix(c, pal[5], clamp(rCrest*0.65 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
-    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.6 + rSplash)*fx.z*1.1;
+    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.6 + rSplash)*fx.z*0.35;
 
     // boat wake: a V of foam spreading back from the bow, churned water behind
     // the stern and a white splash at the bow, all growing with speed
@@ -138,7 +138,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
                    * (0.6 + 0.4*oc_noise(vec2(atan(ly, lx - bow)*6.0, t*5.0)));
       float wake = clamp(arm + wash*0.8 + splash, 0.0, 1.0);
       c = mix(c, pal[5], wake*0.85*(1.0 - fx.z*0.4));
-      c += mix(pal[4], pal[5], 0.5)*wake*fx.z*0.7;
+      c += mix(pal[4], pal[5], 0.5)*wake*fx.z*0.2;
     }
 
     // foam rings around floating objects (boats, players)
@@ -152,7 +152,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       rf += (ring + wake*0.5)*O.w; rg += (ring + wake)*O.w*0.6;
     }
     c = mix(c, pal[5], clamp(rf, 0.0, 1.0)*0.75*(1.0 - fx.z*0.5));
-    c += mix(pal[4], pal[5], 0.5)*rg*fx.z*1.5;
+    c += mix(pal[4], pal[5], 0.5)*rg*fx.z*0.4;
 
     // cartoon twinkles: little 4-point stars that pop in and out
     vec2 sc = p*1.6, cell = floor(sc), f = fract(sc) - 0.5;
@@ -161,7 +161,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float starShape = smoothstep(0.34, 0.3, sqrt(abs(f.x)) + sqrt(abs(f.y))) * sin(ph*3.14159);
     float sp = on * starShape * smoothstep(0.5, 0.55, v) * fx.x;
     c = mix(c, pal[8], min(sp*1.4, 1.0));
-    c += pal[8]*sp*fx.z*0.6;
+    c += pal[8]*sp*fx.z*0.15;
 
     // flat cartoon cloud shadows drifting across the sea (daytime)
     float cs = smoothstep(0.56, 0.575, oc_fbm(p*0.035 + vec2(t*0.012, t*0.006) + 40.0));

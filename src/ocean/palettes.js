@@ -11,8 +11,8 @@ export const TIMES = [
     pal: ['#32226e','#53359a','#9c4fa6','#e06e9c','#ffa576','#fff2d8','#ffc7b4','#ffd060','#fff7c4','#f7c9a8'] },
   { name: 'Dusk',   light: 0.55, fx: [0.8, 0.1, 0.35, 0.6], ambient: { petals: 0.2,  specks: 0.4, glints: 0.8 },
     pal: ['#1b1a55','#2a2a7a','#43409e','#6a5fc2','#a78ae0','#e8dcff','#b5a8ec','#f0c8ff','#ffffff','#9b8fd1'] },
-  { name: 'Night',  light: 0.3,  fx: [1.0, 0.0, 1.0, 0.9],  ambient: { petals: 0.0,  specks: 1.0, glints: 1.0 },
-    pal: ['#04071f','#081039','#0f1d55','#123a75','#1667a0','#86f7ff','#26336f','#d8ecff','#b0fff6','#1c2350'] },
+  { name: 'Night',  light: 0.3,  fx: [0.35, 0.0, 1.0, 0.9],  ambient: { petals: 0.0,  specks: 1.0, glints: 1.0 },
+    pal: ['#04071f','#081039','#0f1d55','#123a75','#1667a0','#b8c4e6','#26336f','#d8ecff','#e3e8ff','#1c2350'] },
 ];
 
 // Button tint for each preset in the UI.
