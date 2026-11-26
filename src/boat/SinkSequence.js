@@ -7,7 +7,7 @@ import * as THREE from 'three';
 // Tugboat.html prototype.
 
 const V3 = THREE.Vector3;
-const PW = 1.5, PH = 2.12;                                  // paper size (world units)
+export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 const DUR = { sink: 2.6, fly: 2.2, toScreen: 0.9, thrown: 1.3, reform: 2.2 };
 
 const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -25,7 +25,13 @@ export class SinkSequence {
 
     this.geo = new THREE.PlaneGeometry(PW, PH, 18, 24);
     this.base = this.geo.attributes.position.array.slice();
-    this.mat = new THREE.MeshBasicMaterial({ color: '#fbf8f1', side: THREE.DoubleSide });   // a blank sheet
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 640; this.canvas.height = Math.round(640 * PH / PW);
+    this.tex = new THREE.CanvasTexture(this.canvas);
+    this.tex.colorSpace = THREE.SRGBColorSpace;
+    this.tex.anisotropy = 4;
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide });
+    this.paint();                                        // a blank sheet with a faint paper grain
     this.paper = new THREE.Mesh(this.geo, this.mat);
     this.paper.visible = false;
     this.paper.renderOrder = 50;
@@ -40,6 +46,59 @@ export class SinkSequence {
   }
 
   get active() { return this.mode !== 'idle'; }
+
+  /** Redraw the paper: grain, plus optional handwriting (so the words fly away with it). */
+  paint(text = '', font = 'Caveat') {
+    const cv = this.canvas, g = cv.getContext('2d'), w = cv.width, h = cv.height;
+    g.fillStyle = '#fbf9f3'; g.fillRect(0, 0, w, h);
+    if (!this._grain) {                                  // faint speckled paper fibres, made once
+      const gc = document.createElement('canvas'); gc.width = w; gc.height = h;
+      const gg = gc.getContext('2d'), img = gg.createImageData(w, h);
+      let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let i = 0; i < img.data.length; i += 4) { const v = 236 + rnd() * 18; img.data[i] = v; img.data[i + 1] = v - 1; img.data[i + 2] = v - 5; img.data[i + 3] = 40; }
+      gg.putImageData(img, 0, 0);
+      this._grain = gc;
+    }
+    g.drawImage(this._grain, 0, 0);
+    if (text) {
+      const size = w * 0.066;
+      g.fillStyle = '#3d4aa3'; g.textAlign = 'center'; g.textBaseline = 'top';
+      g.font = `500 ${size}px "${font}", "Comic Sans MS", cursive`;
+      const maxW = w * 0.82, lines = [];
+      for (const para of text.split('\n')) {
+        let line = '';
+        for (const word of para.split(' ')) {
+          const test = line ? line + ' ' + word : word;
+          if (g.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+        }
+        lines.push(line);
+      }
+      lines.slice(0, 12).forEach((l, i) => g.fillText(l, w / 2, h * 0.12 + i * size * 1.25));
+    }
+    this.tex.needsUpdate = true;
+  }
+
+  /** Screen rectangle (CSS px) the paper covers, from its four corners. */
+  screenRect() {
+    const r = this.dom.getBoundingClientRect(), P = this.paper; P.updateMatrixWorld();
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const [x, y] of [[-PW / 2, -PH / 2], [PW / 2, -PH / 2], [PW / 2, PH / 2], [-PW / 2, PH / 2]]) {
+      const v = new V3(x, y, 0).applyMatrix4(P.matrixWorld).project(this.camera);
+      const sx = r.left + (v.x + 1) / 2 * r.width, sy = r.top + (1 - v.y) / 2 * r.height;
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+
+  /** Start dragging the paper from a pointer event (used by the writing overlay above it). */
+  grab(e) {
+    if (this.mode !== 'card') return;
+    this._pick(e);
+    this._held = this._planePoint(); this._vel.set(0, 0, 0);
+    this._heldId = e.pointerId;
+    this._trail = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+    this.setMode('held');
+  }
 
   setMode(m) { this.mode = m; this.t0 = this._now; this.onChange?.(m); }
 
@@ -60,9 +119,12 @@ export class SinkSequence {
   }
 
   _cardTarget() {
+    // fits below the avatar row at the top: ~60% of the height, centred a little low
     const c = this.camera, tf = Math.tan(THREE.MathUtils.degToRad(c.fov) / 2);
-    const D = Math.max(PH / (2 * tf * 0.62), PW / (2 * tf * c.aspect * 0.8));
-    return { p: new V3(0, 0, -D).applyQuaternion(c.quaternion).add(c.position), q: c.quaternion.clone(), D };
+    const D = Math.max(PH / (2 * tf * 0.6), PW / (2 * tf * c.aspect * 0.86));
+    const down = 2 * D * tf * 0.075;
+    const p = new V3(0, -down, -D).applyQuaternion(c.quaternion).add(c.position);
+    return { p, q: c.quaternion.clone(), D };
   }
 
   _bend(t, amp) {
@@ -103,6 +165,7 @@ export class SinkSequence {
       if (k >= 1) {
         B.group.visible = false;
         P.visible = true;
+        this.paint();
         const s = this.spot, c = this.camera.position;
         const mid = s.clone().lerp(c, 0.42);
         this._flight = new THREE.CatmullRomCurve3([
@@ -186,14 +249,14 @@ export class SinkSequence {
       this.setMode('held');
       e.stopImmediatePropagation(); e.preventDefault();
     }, { capture: true });
-    dom.addEventListener('pointermove', e => {
+    window.addEventListener('pointermove', e => {
       if (this.mode === 'held' && e.pointerId === this._heldId) {
         this._pick(e); this._held = this._planePoint();
         this._trail.push({ x: e.clientX, y: e.clientY, t: performance.now() });
         if (this._trail.length > 12) this._trail.shift();
         return;
       }
-      if (this.mode === 'card') dom.style.cursor = this._pick(e) ? 'grab' : '';
+      if (this.mode === 'card' && e.target === dom) dom.style.cursor = this._pick(e) ? 'grab' : '';
     });
     const up = e => {
       if (this.mode !== 'held' || e.pointerId !== this._heldId) return;
@@ -215,7 +278,7 @@ export class SinkSequence {
         this._startThrow(right.multiplyScalar(sx * speed).addScaledVector(up, -sy * speed));
       } else this.setMode('card');                                          // not flicked: settle back
     };
-    dom.addEventListener('pointerup', up, { capture: true });
-    dom.addEventListener('pointercancel', up, { capture: true });
+    window.addEventListener('pointerup', up, { capture: true });
+    window.addEventListener('pointercancel', up, { capture: true });
   }
 }

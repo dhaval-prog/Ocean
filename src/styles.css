@@ -115,12 +115,83 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 /* --- sink / paper sequence: plain guide text under the paper -------------- */
 .seq-hint {
   position: absolute; z-index: 12; left: 50%; transform: translateX(-50%);
-  bottom: calc(28px + var(--safe-b)); margin: 0; width: max-content; max-width: calc(100% - 32px);
+  top: 80%; margin: 0; width: max-content; max-width: calc(100% - 32px);
   font-weight: 600; font-size: 16px; letter-spacing: 0.02em; text-align: center;
   color: #fff; text-shadow: 0 1px 2px rgba(10, 20, 60, 0.55), 0 0 14px rgba(10, 20, 60, 0.35);
   pointer-events: none; user-select: none;
 }
 .seq-hint[hidden] { display: none; }
 @media (max-width: 640px) {
-  .seq-hint { bottom: calc(100px + var(--safe-b)); font-size: 15px; }
+  .seq-hint { font-size: 15px; }
 }
+
+/* --- the letter on the paper ---------------------------------------------- */
+.letter {
+  position: absolute; z-index: 11; display: flex; flex-direction: column; align-items: center;
+  padding: calc(var(--u) * 10) calc(var(--u) * 8) calc(var(--u) * 7);
+  box-sizing: border-box; touch-action: none; cursor: grab; user-select: none;
+}
+.letter[hidden] { display: none; }
+.letter-text {
+  flex: 1; width: 100%; margin: 0; padding: 0; border: 0; outline: none; resize: none; background: transparent;
+  font: 500 calc(var(--u) * 6.6)/1.25 'Caveat', 'Comic Sans MS', cursive; color: #3d4aa3; text-align: center;
+  pointer-events: none; caret-color: #3d4aa3;
+}
+.letter-text::placeholder { color: #4a56b0; opacity: 0.95; }
+.letter-actions { display: flex; gap: calc(var(--u) * 4); justify-content: center; }
+.letter-actions button {
+  position: relative; width: calc(var(--u) * 16); height: calc(var(--u) * 16); min-width: 40px; min-height: 40px;
+  border: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
+  background: #e3e8f6; color: #2a2433; box-shadow: 0 calc(var(--u) * 1.4) calc(var(--u) * 3.5) rgba(40, 60, 120, 0.16);
+}
+.letter-actions button.primary { background: #cdd9f7; }
+.letter-actions button svg { width: 42%; height: 42%; }
+.letter-actions .badge, .people .badge {
+  position: absolute; top: -6%; right: -6%; min-width: 1.7em; height: 1.7em; padding: 0 0.4em; box-sizing: border-box;
+  border-radius: 999px; display: grid; place-items: center; font: 700 12px/1 system-ui, sans-serif; color: #fff;
+  background: #c8714f; border: 2px solid #fff;
+}
+
+/* --- people row at the top (you in the middle, friends to the right) ------ */
+.people {
+  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(176px + var(--safe-t)); padding-top: calc(14px + var(--safe-t));
+  overflow: hidden; touch-action: none;
+  background: linear-gradient(to bottom, var(--card) 0%, transparent 100%);
+}
+.people[hidden] { display: none; }
+.people-track { display: flex; gap: 28px; align-items: flex-start; width: max-content; transition: transform 0.45s cubic-bezier(.2, .9, .25, 1.1); }
+.person {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 0; border: 0; background: none;
+  font: inherit; color: var(--ink); opacity: 0.38; transition: opacity 0.3s, transform 0.3s; cursor: pointer;
+}
+.person.selected { opacity: 1; }
+.person.extra { cursor: default; }
+.person .face {
+  position: relative; width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--c, #ccc); color: #fff; font: 700 26px/1 system-ui, sans-serif; letter-spacing: 0.02em;
+  border: 3px solid var(--r, transparent); box-sizing: border-box; transition: width 0.3s, height 0.3s, font-size 0.3s;
+}
+.person.selected .face { width: 96px; height: 96px; font-size: 32px; }
+.person .face.bell { background: #8e8a76; color: #fff; }
+.person .face.status { background: #5d5847; color: #fff; }
+.person .face svg { width: 38%; height: 38%; }
+.person .face .plus {
+  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: #6cc06c; color: #fff; font: 700 18px/1 system-ui, sans-serif; border: 2px solid #fff;
+}
+.people .badge { background: #7d9be0; top: -4%; right: -4%; }
+.people .badge.warm { background: #e48a73; top: auto; bottom: 2%; right: -6%; }
+.person .name { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.person.selected .name { font-size: 18px; }
+.person .city { font-size: 12px; opacity: 0.7; }
+@media (max-width: 640px) {
+  .people { height: calc(146px + var(--safe-t)); }
+  .people-track { gap: 14px; }
+  .person { width: 76px; }
+  .person .face { width: 60px; height: 60px; font-size: 20px; }
+  .person.selected .face { width: 76px; height: 76px; font-size: 26px; }
+  .person .name { font-size: 12px; } .person.selected .name { font-size: 15px; }
+}
+
+/* while writing, the ocean UI steps back */
+body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; pointer-events: none; transition: opacity 0.3s; }

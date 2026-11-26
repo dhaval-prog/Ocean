@@ -10,6 +10,7 @@ import { Boat } from './boat/Boat.js';
 import { Marker } from './boat/Marker.js';
 import { Smoke } from './boat/Smoke.js';
 import { SinkSequence } from './boat/SinkSequence.js';
+import { Letter } from './social/Letter.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -61,9 +62,11 @@ const seq = new SinkSequence({
   onChange: mode => {
     controls.enabled = mode === 'idle';                // the camera holds still during the sequence
     if (mode !== 'idle') marker.hide();
-    seqHint.hidden = !(mode === 'card' || mode === 'held');   // user guide while the paper is on screen
+    letter?.onMode(mode);                              // writing overlay, people row, guide text
   },
 });
+// the letter on the paper + who it's for (people row at the top)
+const letter = new Letter({ root: app, seq, hint: seqHint });
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
@@ -301,6 +304,7 @@ renderer.setAnimationLoop(() => {
   controls.update(dt);
   ocean.update(dt, elapsed);
   seq.update(dt, performance.now());
+  letter.update();
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);
@@ -319,4 +323,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, seq, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
