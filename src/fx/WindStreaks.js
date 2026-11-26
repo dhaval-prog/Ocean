@@ -1,50 +1,39 @@
 import * as THREE from 'three';
 
-// Cartoon wind: thin white lines that sweep across the screen and curl into a
-// little loop. Drawn in screen space as one batched mesh of ribbons.
+// Anime wind lines: thin white curves that sweep across the screen.
+// Drawn in screen space as one batched mesh (each streak is a short ribbon).
 
-const SEGS = 96;
+const SEGS = 16;
 
 const VERT = /* glsl */ `
 attribute vec2 aCorner; attribute float aSeed;
 uniform float uTime; uniform vec2 uRes; uniform float uStrength;
 varying float vAlong; varying float vAcross; varying float vFade;
-
-// path of a curl: a gentle wave with one loop near the front (s: 0 tail … 1 head)
-vec2 path(float s, float L, float R, float seed) {
-  float th = 6.2832 * clamp((s - 0.55) / 0.3, 0.0, 1.0);
-  float x = s*L + R*1.6*sin(th);
-  float y = R*1.6*(1.0 - cos(th)) + sin(s*6.0 + seed*6.0)*0.012;
-  return vec2(x, y);
-}
 void main() {
-  float period = 7.0 + fract(aSeed*7.13)*6.0;
+  float period = 6.0 + fract(aSeed*7.13)*5.0;
   float lt = mod(uTime + aSeed*23.0, period) / period;
-  float live = step(lt, 0.45), k = lt / 0.45;
-  float L = 0.32 + fract(aSeed*3.7)*0.18, R = 0.035 + fract(aSeed*9.1)*0.02;
-  float aspect = uRes.x / uRes.y;
-  vec2 origin = vec2(mix(-1.3, 1.05, k) - L*0.5, -0.7 + fract(aSeed*5.31)*1.4);
-
-  float s = aCorner.x;
-  vec2 pa = path(s, L, R, aSeed), pb = path(s + 0.01, L, R, aSeed);
-  vec2 t = normalize((pb - pa) * vec2(1.0, aspect) + 1e-5);
-  vec2 nrm = vec2(-t.y, t.x) / vec2(1.0, aspect);
+  float live = step(lt, 0.4), k = lt / 0.4;
+  float len = 0.35 + fract(aSeed*3.7)*0.3;
+  float y0 = -0.15 + fract(aSeed*5.31)*0.95;
+  float head = mix(-1.3, 1.3 + len, k);
+  float x = head - len*(1.0 - aCorner.x);
+  float y = y0 + sin(x*2.2 + aSeed*6.0)*0.05 + (x - head)*0.04;
   float px = 2.0 / uRes.y;
-  vec2 p = origin + pa + nrm * aCorner.y * px * 1.2 * (0.6 + 0.8*sin(s*3.14159));
-  vAlong = s; vAcross = aCorner.y; vFade = sin(k*3.14159) * live * uStrength;
-  gl_Position = vec4(p, 0.0, 1.0);
+  y += aCorner.y * px * (1.0 + 1.2*sin(aCorner.x*3.14159));
+  vAlong = aCorner.x; vAcross = aCorner.y; vFade = sin(k*3.14159) * live * uStrength;
+  gl_Position = vec4(x, y, 0.0, 1.0);
 }`;
 
 const FRAG = /* glsl */ `
 varying float vAlong; varying float vAcross; varying float vFade;
 void main() {
-  float a = smoothstep(0.0, 0.35, vAlong) * smoothstep(1.0, 0.9, vAlong) * (1.0 - abs(vAcross)) * vFade;
+  float a = smoothstep(0.0, 0.6, vAlong) * smoothstep(1.0, 0.85, vAlong) * (1.0 - abs(vAcross)) * vFade;
   if (a < 0.005) discard;
   gl_FragColor = vec4(vec3(1.0), a);
 }`;
 
 export class WindStreaks {
-  constructor(count = 6) {
+  constructor(count = 7) {
     const perStreak = (SEGS + 1) * 2;
     const corner = new Float32Array(count * perStreak * 2), seed = new Float32Array(count * perStreak), index = [];
     for (let s = 0; s < count; s++) {
@@ -74,7 +63,7 @@ export class WindStreaks {
 
   update(elapsed, storm, light) {
     this.uniforms.uTime.value = elapsed;
-    this.uniforms.uStrength.value = (0.4 + storm * 0.5) * (0.55 + 0.45 * light);
+    this.uniforms.uStrength.value = (0.22 + storm * 0.55) * (0.5 + 0.5 * light);
   }
 
   setSize(w, h) { this.uniforms.uRes.value.set(w, h); }
