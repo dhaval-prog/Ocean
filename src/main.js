@@ -55,19 +55,15 @@ scene.add(boat.group, marker.group, smoke.points);
 const funnelPos = new THREE.Vector3();
 
 // click the boat: it sinks, a paper flies up and onto the screen; flick it back to get the boat back
-const seqUI = document.getElementById('seq-ui'), seqHint = document.getElementById('seq-hint'), seqThrow = document.getElementById('seq-throw');
-const SEQ_HINTS = { sink: 'Glug glug… going down', card: 'Drag and flick the paper back into the sea', held: 'Let go with a flick to throw it' };
+const seqHint = document.getElementById('seq-hint');
 const seq = new SinkSequence({
   scene, camera, dom: renderer.domElement, boat, ocean,
   onChange: mode => {
     controls.enabled = mode === 'idle';                // the camera holds still during the sequence
     if (mode !== 'idle') marker.hide();
-    seqHint.textContent = SEQ_HINTS[mode] || '';
-    seqThrow.hidden = !(mode === 'card' || mode === 'held');
-    seqUI.hidden = !seqHint.textContent && seqThrow.hidden;
+    seqHint.hidden = !(mode === 'card' || mode === 'held');   // user guide while the paper is on screen
   },
 });
-seqThrow.addEventListener('click', e => { e.stopPropagation(); seq.throwBack(); });
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });

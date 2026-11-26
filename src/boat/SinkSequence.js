@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Click the boat → it sinks → a sheet of paper flies up out of the water and
-// comes onto the screen. Drag-and-flick the paper (or press "Throw it back")
+// comes onto the screen. Drag and flick the paper (or press Esc)
 // and it sails back into the sea, and the boat bobs back up.
 // Adapted from the "sink → paper → catch → throw → re-form" sequence in the
 // Tugboat.html prototype.
@@ -14,38 +14,6 @@ const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 const backOut = k => { const c = 1.6; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
 const tumbleQ = t => new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + t * 3.4, t * 1.9 + Math.sin(t * 2.6) * 0.9, Math.sin(t * 2.1) * 1.3));
 
-function paperTexture() {
-  const w = 512, h = 724, cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const g = cv.getContext('2d');
-  g.fillStyle = '#fbf7ee'; g.fillRect(0, 0, w, h);
-  g.strokeStyle = 'rgba(80,120,200,0.28)'; g.lineWidth = 2;               // ruled lines
-  for (let y = 150; y < h - 30; y += 34) { g.beginPath(); g.moveTo(24, y); g.lineTo(w - 24, y); g.stroke(); }
-  g.strokeStyle = 'rgba(220,70,70,0.45)';                                   // margin
-  g.beginPath(); g.moveTo(70, 0); g.lineTo(70, h); g.stroke();
-  g.fillStyle = '#2b3160'; g.textAlign = 'center';
-  g.font = '700 64px "Comic Sans MS", "Marker Felt", "Chalkboard SE", cursive';
-  g.fillText('Ahoy!', w / 2 + 20, 105);
-  // little doodle of the tugboat
-  g.save(); g.translate(w / 2 + 20, 330); g.lineWidth = 5; g.lineJoin = 'round'; g.strokeStyle = '#2b3160';
-  g.fillStyle = '#e4573d'; g.beginPath(); g.moveTo(-120, 0); g.lineTo(120, 0); g.lineTo(95, 46); g.lineTo(-100, 46); g.closePath(); g.fill(); g.stroke();
-  g.fillStyle = '#f3e3c4'; g.fillRect(-60, -55, 95, 55); g.strokeRect(-60, -55, 95, 55);
-  g.fillStyle = '#e4573d'; g.fillRect(-35, -100, 26, 45); g.strokeRect(-35, -100, 26, 45);
-  g.strokeStyle = 'rgba(43,49,96,0.55)';
-  for (const [x, y, r] of [[-12, -125, 14], [8, -152, 18], [36, -182, 22]]) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); }
-  g.strokeStyle = '#4a86d8'; g.lineWidth = 5;
-  for (let i = -2; i <= 2; i++) { g.beginPath(); g.arc(i * 58, 72, 22, Math.PI * 0.15, Math.PI * 0.85); g.stroke(); }
-  g.restore();
-  g.fillStyle = 'rgba(43,49,96,0.75)'; g.font = '500 30px "Comic Sans MS", "Marker Felt", cursive';
-  g.fillText('Flick me back to the sea', w / 2 + 20, 520);
-  g.fillText('to get your boat back!', w / 2 + 20, 556);
-  g.strokeStyle = 'rgba(29,35,80,0.85)'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6); // ink edge
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-
 export class SinkSequence {
   /**
    * @param {{ scene, camera, dom, boat, ocean, onChange?: (mode: string) => void }} o
@@ -57,7 +25,7 @@ export class SinkSequence {
 
     this.geo = new THREE.PlaneGeometry(PW, PH, 18, 24);
     this.base = this.geo.attributes.position.array.slice();
-    this.mat = new THREE.MeshBasicMaterial({ map: paperTexture(), side: THREE.DoubleSide });
+    this.mat = new THREE.MeshBasicMaterial({ color: '#fbf8f1', side: THREE.DoubleSide });   // a blank sheet
     this.paper = new THREE.Mesh(this.geo, this.mat);
     this.paper.visible = false;
     this.paper.renderOrder = 50;
@@ -212,21 +180,40 @@ export class SinkSequence {
       if (this.mode !== 'card' || !this._pick(e)) return;
       this._held = this._planePoint(); this._vel.set(0, 0, 0);
       this._heldId = e.pointerId;
+      this._trail = [{ x: e.clientX, y: e.clientY, t: performance.now() }];   // finger samples for the flick
       dom.setPointerCapture?.(e.pointerId);
       dom.style.cursor = 'grabbing';
       this.setMode('held');
       e.stopImmediatePropagation(); e.preventDefault();
     }, { capture: true });
     dom.addEventListener('pointermove', e => {
-      if (this.mode === 'held' && e.pointerId === this._heldId) { this._pick(e); this._held = this._planePoint(); return; }
+      if (this.mode === 'held' && e.pointerId === this._heldId) {
+        this._pick(e); this._held = this._planePoint();
+        this._trail.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+        if (this._trail.length > 12) this._trail.shift();
+        return;
+      }
       if (this.mode === 'card') dom.style.cursor = this._pick(e) ? 'grab' : '';
     });
     const up = e => {
       if (this.mode !== 'held' || e.pointerId !== this._heldId) return;
       dom.style.cursor = '';
-      const tg = this._cardTarget(), moved = this.paper.position.distanceTo(tg.p);
-      if (this._vel.length() > 3.5 || moved > tg.D * 0.35) this._startThrow(this._vel.clone().clampLength(4, 14));
-      else this.setMode('card');                                           // not flicked: settle back
+      // judge the flick from the finger itself (not the paper, which trails behind on slow devices)
+      const now = performance.now(), tr = this._trail, first = tr[0], end = { x: e.clientX, y: e.clientY };
+      const recent = tr.find(q => now - q.t < 120) || tr[tr.length - 1];
+      const dtS = Math.max(0.016, (now - recent.t) / 1000);
+      const vx = (end.x - recent.x) / dtS, vy = (end.y - recent.y) / dtS;          // px / s
+      const size = Math.min(dom.clientWidth, dom.clientHeight) || 1;
+      const dragged = Math.hypot(end.x - first.x, end.y - first.y);
+      const fast = Math.hypot(vx, vy) > size * 1.2, far = dragged > size * 0.18;
+      if (fast || far) {
+        // screen direction → world, using the camera's right / up
+        let sx = fast ? vx : end.x - first.x, sy = fast ? vy : end.y - first.y;
+        const len = Math.hypot(sx, sy) || 1; sx /= len; sy /= len;
+        const right = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+        const speed = THREE.MathUtils.clamp(Math.hypot(vx, vy) / size * 4, 5, 14);
+        this._startThrow(right.multiplyScalar(sx * speed).addScaledVector(up, -sy * speed));
+      } else this.setMode('card');                                          // not flicked: settle back
     };
     dom.addEventListener('pointerup', up, { capture: true });
     dom.addEventListener('pointercancel', up, { capture: true });

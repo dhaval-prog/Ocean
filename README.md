@@ -19,7 +19,7 @@ npm run build      # production build in dist/
 - **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
 - **Tugboat**: a cel-shaded, outlined tugboat bobs on the sea; its windows glow at night. Model: `public/models/tugboat.glb`.
   - **Steer**: tap the water to sail there, or press on the boat and drag to steer it with your finger (it carries on to where you let go). Desktop: arrow keys / WASD to drive, Space for the horn.
-  - **Tap the boat** and it sinks; a sheet of paper flies up out of the water and comes onto the screen. Drag and flick the paper back into the sea (or press **Throw it back** / Esc) and the boat bobs back up. The paper currently shows a doodle note; it is the place for messages later.
+  - **Tap the boat** and it sinks; a sheet of paper flies up out of the water and comes onto the screen. Drag and flick the paper back into the sea (or press Esc) and the boat bobs back up. The paper is blank, with a plain "Drag and flick back into the sea" guide under it.
   - **Tap the water** to sail there. A bobbing buoy with a flapping flag and pulsing rings marks the destination and disappears when the boat arrives.
   - **Wake**: a soft V of foam spreads back from the bow, with churned water behind the stern and a white splash at the bow, all growing with speed (glowing at night).
   - **Funnel smoke**: light cartoon puffs pop out of the funnel and fade quickly behind the boat; a few more when it goes fast, an occasional one when idle, a little burst with the horn.
