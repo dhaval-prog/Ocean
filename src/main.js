@@ -7,6 +7,7 @@ import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
 import { TopDownControls } from './core/TopDownControls.js';
 import { Boat } from './boat/Boat.js';
+import { Marker } from './boat/Marker.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -46,7 +47,8 @@ scene.add(ocean.mesh, particles.points, streaks.mesh);
 
 // the tugboat: tap the sea to sail it there
 const boat = new Boat(ocean);
-scene.add(boat.group);
+const marker = new Marker();
+scene.add(boat.group, marker.group);
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
@@ -118,7 +120,7 @@ window.addEventListener('pointerup', e => {
   // a quick tap (not a drag or pinch) sends the boat there
   if (down && e.isPrimary && performance.now() - down.t < 400 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 10) {
     const p = waterPoint(e);
-    if (p) boat.sailTo(p.x, p.z);
+    if (p) { boat.sailTo(p.x, p.z); marker.place(p.x, p.z, ocean.base); setFollow(true); }
   }
   down = null;
 });
@@ -127,17 +129,40 @@ renderer.domElement.addEventListener('pointermove', e => {
   lastTrail = performance.now(); rippleAt(e, 0.5);
 });
 
+// --- follow mode: the camera keeps the boat in view ---------------------------
+// On by default and whenever you send the boat somewhere; dragging the view
+// turns it off; the button toggles it.
+const followBtn = document.getElementById('follow');
+let follow = true;
+function setFollow(on) {
+  follow = on;
+  followBtn.classList.toggle('on', on);
+  followBtn.setAttribute('aria-pressed', String(on));
+  followBtn.setAttribute('aria-label', on ? 'Stop following the boat' : 'Follow the boat');
+}
+setFollow(true);
+followBtn.addEventListener('click', e => { e.stopPropagation(); setFollow(!follow); });
+controls.onPan = () => setFollow(false);
+function followBoat(dt) {
+  if (!follow || !boat.ready) return;
+  // look a little ahead of the boat when it is moving
+  const lead = boat.speed * 0.9;
+  const tx = boat.position.x + Math.cos(boat.heading) * lead, tz = boat.position.y - Math.sin(boat.heading) * lead;
+  const k = Math.min(1, dt * 2.5);
+  controls.center.x += (tx - controls.center.x) * k;
+  controls.center.z += (tz - controls.center.z) * k;
+  controls.velocity.set(0, 0);
+}
+
 // --- slow drift when idle: the view floats in a lazy circle -----------------
 let idle = 0, interacting = false, driftT = 0;
 const anchor = new THREE.Vector2();
 controls.onStart = () => { interacting = true; idle = 0; };
 controls.onEnd = () => { interacting = false; idle = 0; };
 function drift(dt) {
-  if (interacting) return;
-  if (idle === 0) driftT = 0;
+  if (interacting || follow) { idle = 0; return; }
+  if (idle === 0) { driftT = 0; anchor.set(controls.center.x, controls.center.z); }
   idle += dt;
-  // float around the boat, following it if it sails off
-  anchor.set(boat.position.x, boat.position.y);
   const w = THREE.MathUtils.smoothstep(idle, 4, 8);
   if (w <= 0) return;
   driftT += dt * w;
@@ -200,9 +225,12 @@ renderer.setAnimationLoop(() => {
   }
 
   drift(dt);
+  followBoat(dt);
   controls.update(dt);
   ocean.update(dt, elapsed);
   boat.update(dt, elapsed);
+  if (marker.show && !boat.target) marker.hide();   // arrived
+  marker.update(dt, elapsed);
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
@@ -215,4 +243,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, particles, post, ambience, quality };

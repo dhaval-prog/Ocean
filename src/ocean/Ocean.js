@@ -51,6 +51,7 @@ export class Ocean {
       uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 }, uGlitter: { value: 0.3 },
       uRipples: { value: Array.from({ length: 12 }, () => new THREE.Vector4(0, 0, -99, 0)) },
       uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
+      uBoat: { value: new THREE.Vector4(0, 0, 0, 0) }, uBoatSize: { value: new THREE.Vector2(1.9, 0.7) },
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
@@ -121,6 +122,12 @@ export class Ocean {
    * Foam rings for floating objects (boats, players). Up to 4.
    * @param {{x:number, z:number, radius?:number}[]} list
    */
+  /** Boat wake: position, heading (radians, 0 = +x, π/2 = up on screen), speed 0..1, bow distance, half beam. */
+  setBoat(x, z, heading, speed01, bow = 1.9, halfBeam = 0.7) {
+    this.uniforms.uBoat.value.set(x, z, heading, speed01);
+    this.uniforms.uBoatSize.value.set(bow, halfBeam);
+  }
+
   setObjects(list) {
     this.uniforms.uObjects.value.forEach((o, i) => {
       const it = list[i];

@@ -14,11 +14,13 @@ export class TopDownControls {
     this.velocity = new THREE.Vector2();
     this.dragging = false;
     this.onStart = null; this.onEnd = null;
+    this.onPan = null;   // called once per gesture when the view is actually dragged
     this._ray = new THREE.Raycaster();
     this._plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ground);
 
     const pts = new Map();
     let last = null; // { x, y, dist } of the previous gesture frame
+    let moved = 0, panned = false;
     const gesture = () => {
       const p = [...pts.values()];
       const x = p.reduce((s, q) => s + q.x, 0) / p.length, y = p.reduce((s, q) => s + q.y, 0) / p.length;
@@ -30,13 +32,15 @@ export class TopDownControls {
       dom.setPointerCapture?.(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       last = gesture();
-      if (!this.dragging) { this.dragging = true; this.velocity.set(0, 0); this.onStart?.(); }
+      if (!this.dragging) { this.dragging = true; this.velocity.set(0, 0); moved = 0; panned = false; this.onStart?.(); }
     });
     dom.addEventListener('pointermove', e => {
       if (!pts.has(e.pointerId)) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const g = gesture();
       if (last && g.n === last.n) {
+        if (g.n === 1) moved += Math.hypot(g.x - last.x, g.y - last.y);   // pinching is not panning
+        if (!panned && moved > 8) { panned = true; this.onPan?.(); }
         // move so the water point under the finger stays under the finger
         const a = this.screenToWater(last.x, last.y), b = this.screenToWater(g.x, g.y);
         const k = this.worldPerPixel();

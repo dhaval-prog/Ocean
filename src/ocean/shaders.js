@@ -6,6 +6,7 @@ uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 
 uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
 uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter;
 uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
+uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1 | bow distance, half beam
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
@@ -104,6 +105,41 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c *= 1.0 + rH*0.1;
     c = mix(c, pal[5], clamp(rCrest*0.65 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
     c += mix(pal[4], pal[5], 0.5)*(rCrest*0.6 + rSplash)*fx.z*1.1;
+
+    // boat wake: a V of foam spreading back from the bow, churned water behind
+    // the stern and a white splash at the bow, all growing with speed
+    if (uBoat.w > 0.01) {
+      vec2 fwd = vec2(cos(uBoat.z), -sin(uBoat.z)), side = vec2(-fwd.y, fwd.x);
+      vec2 d = p - uBoat.xy;
+      float lx = dot(d, fwd), ly = abs(dot(d, side));
+      float sp = uBoat.w, bow = uBoatSize.x, beam = uBoatSize.y;
+      float behind = bow - lx;                                   // distance back from the bow
+      float reach = 3.0 + 8.0*sp;
+      float arm = 0.0;
+      if (behind > 0.0 && behind < reach) {
+        // soft, wobbly foam lines (not dashes): width and position wander a little
+        float nz = oc_noise(vec2(behind*1.3 - t*1.6, 3.0));
+        float spread = beam*0.6 + behind*0.36 + (nz - 0.5)*0.18;  // ~20° Kelvin-style wedge
+        float w = (0.07 + behind*0.025) * (0.6 + 0.8*oc_noise(vec2(behind*2.1 + t, 9.0)));
+        arm = smoothstep(w, w*0.3, abs(ly - spread)) * (0.65 + 0.35*nz);
+        float spread2 = spread*0.7 + (oc_noise(vec2(behind*1.7 + t*1.2, 5.0)) - 0.5)*0.12;
+        arm += 0.45*smoothstep(w*0.7, w*0.2, abs(ly - spread2)) * smoothstep(0.35, 0.6, oc_noise(vec2(behind*0.9 - t*0.8, 7.0)));
+        arm *= smoothstep(reach, reach*0.35, behind) * sp;
+      }
+      float stern = behind - bow*2.0;                              // past the stern: propeller wash
+      float wash = 0.0;
+      if (stern > -0.3) {
+        float wid = 0.25 + max(stern, 0.0)*0.08;
+        wash = smoothstep(wid, wid*0.3, ly) * smoothstep(3.0 + 8.0*sp, 0.0, stern)
+             * smoothstep(0.3, 0.7, oc_noise(vec2(stern*3.0 - t*4.0, ly*6.0))) * sp;
+      }
+      float bd = length(vec2(max(lx - bow*0.85, 0.0), ly*0.8));   // bow splash: white crescent at the tip
+      float splash = smoothstep(0.45 + 0.35*sp, 0.15, bd) * step(bow*0.55, lx) * smoothstep(0.15, 0.5, sp)
+                   * (0.6 + 0.4*oc_noise(vec2(atan(ly, lx - bow)*6.0, t*5.0)));
+      float wake = clamp(arm + wash*0.8 + splash, 0.0, 1.0);
+      c = mix(c, pal[5], wake*0.85*(1.0 - fx.z*0.4));
+      c += mix(pal[4], pal[5], 0.5)*wake*fx.z*0.7;
+    }
 
     // foam rings around floating objects (boats, players)
     float rg = 0.0, rf = 0.0;

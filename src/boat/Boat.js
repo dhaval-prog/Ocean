@@ -106,13 +106,14 @@ export class Boat {
     this.body.rotation.x = Math.sin(t * 1.1) * 0.05 + turn * 0.08 * (this.speed / this.maxSpeed);   // roll
     this.body.rotation.z = Math.sin(t * 1.3 + 1.0) * 0.03 + 0.04 * (this.speed / this.maxSpeed);     // pitch
 
-    // --- wake: small drops at the stern while moving
-    if (this.speed > 0.4 && (this._wake -= dt) <= 0) {
-      this._wake = 0.16;
+    // --- wake: V of foam + bow splash drawn by the water shader, plus the odd bubble drop
+    this.ocean.setBoat(this.position.x, this.position.y, this.heading, this.speed / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
+    if (this.speed > 0.6 && (this._wake -= dt) <= 0) {
+      this._wake = 0.45;
       const back = BOW_TO_STERN * MODEL_SCALE;
       const sx = this.position.x - Math.cos(this.heading) * back, sz = this.position.y + Math.sin(this.heading) * back;
       const side = (Math.random() - 0.5) * 0.6;
-      this.ocean.addRipple(sx - Math.sin(this.heading) * side, sz - Math.cos(this.heading) * side, 0.4 + 0.6 * this.speed / this.maxSpeed);
+      this.ocean.addRipple(sx - Math.sin(this.heading) * side, sz - Math.cos(this.heading) * side, 0.3 + 0.3 * this.speed / this.maxSpeed);
     }
   }
 

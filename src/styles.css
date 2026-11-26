@@ -104,3 +104,10 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 @media (max-width: 640px) {
   .icon-btn { right: calc(12px + var(--safe-r)); }
 }
+
+/* --- follow-the-boat toggle (left of the sound button) ------------------ */
+.follow-btn { right: calc(162px + var(--safe-r)); }
+.follow-btn.on { background: var(--accent); color: #fff; }
+@media (max-width: 640px) {
+  .follow-btn { right: calc(64px + var(--safe-r)); }
+}
