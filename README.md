@@ -16,7 +16,7 @@ npm run build      # production build in dist/
 ## What's here
 
 - **Anime sky**: painted gradient, cel-shaded cumulus (towering banks on the horizon, drifting puffs overhead), sun, crescent moon, stars, Milky Way, shooting stars, god rays through cloud gaps and a glowing horizon line. All blend through the 5 times of day.
-- **Water**: stylized shader with time of day, sea state, foam amount, reef shallows, cel-shaded wave crests.
+- **Water**: stylized shader with time of day, sea state, foam amount, glitter amount (sun sparkle path + sparkles; default 0.3), reef shallows, cel-shaded wave crests.
 - **Touch the sea**: tapping or dragging makes ripples: white foam by day, glowing blue-green at night. At night the sea also glows by itself in patches.
 - **Ambient life**: lights drifting up off the water (dusk/night), petals on the wind (dawn/sunset), snow-like specks at night, anime wind lines.
 - **Finishing pass**: bloom on the brightest highlights, colour grading (saturation, warm highlights, cool shadows) and a vignette.

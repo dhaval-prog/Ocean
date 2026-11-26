@@ -4,7 +4,7 @@
 export const GLSL_COMMON = /* glsl */ `
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
 uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
-uniform float uStorm; uniform float uReef; uniform float uFoam; uniform vec2 uSun;
+uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter; uniform vec2 uSun;
 uniform vec4 uRipples[8]; uniform vec4 uObjects[4];
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -110,16 +110,18 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     vec2 dp = p - uSun + (vec2(oc_noise(p*1.5 + t*0.6), oc_noise(p*1.5 - t*0.6 + 3.0)) - 0.5)*0.45;
     float dd = length(dp*vec2(1.0, 0.72));
     float halo = smoothstep(4.5, 0.4, dd);
-    c += pal[7]*halo*halo*fx.w*0.3;
+    c += pal[7]*halo*halo*fx.w*0.3*mix(0.4, 1.0, uGlitter);
     c = mix(c, pal[8], smoothstep(1.35, 1.1, dd)*fx.w*0.5);
     float path = smoothstep(2.8, 0.0, abs(p.x - uSun.x)) * smoothstep(uSun.y - 0.5, uSun.y + 2.5, p.y);
     float gl = smoothstep(0.80, 0.97, oc_ridge(vec2(p.x*4.5, p.y*1.5 - t*0.9))) * path;
-    c = mix(c, pal[7], gl*mix(0.35, 0.75, foam)*max(fx.w, 0.4));
+    c = mix(c, pal[7], gl*mix(0.35, 0.75, foam)*max(fx.w, 0.4)*uGlitter);
 
     // sparkles with fading trails
     vec2 cell = floor(p*7.0); float st = t*1.5, sp = 0.0;
-    for (int k = 0; k < 3; k++) sp += step(0.992, oc_hash(cell + floor(st) - float(k))) * (k == 0 ? 1.0 : (1.0 - fract(st))*0.5/float(k));
-    sp *= smoothstep(0.55, 0.6, v) * fx.x;
+    float spTh = mix(0.998, 0.992, uGlitter);
+    for (int k = 0; k < 3; k++) sp += step(spTh, oc_hash(cell + floor(st) - float(k))) * (k == 0 ? 1.0 : (1.0 - fract(st))*0.5/float(k));
+    // fewer, fainter sparkles; none in the distance where they turn into shimmering dots
+    sp *= smoothstep(0.55, 0.6, v) * fx.x * mix(0.5, 1.0, uGlitter) * smoothstep(45.0, 15.0, length(vWPos - cameraPosition));
     c = mix(c, pal[8], min(sp, 1.0));
     c += pal[8]*sp*fx.z*0.6;
 

@@ -72,11 +72,12 @@ function applyLook() {
 const state = { tod: 1, auto: true };
 if (params.has('tod')) { state.tod = +params.get('tod'); state.auto = false; } // e.g. ?tod=4 for night
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, auto: state.auto, storm: ocean.storm, foam: ocean.foam, reef: ocean.reef },
+  initial: { tod: state.tod, auto: state.auto, storm: ocean.storm, foam: ocean.foam, glitter: ocean.glitter, reef: ocean.reef },
   onTimeOfDay: v => { state.tod = v; state.auto = false; ocean.setTimeOfDay(v); applyLook(); },
   onAuto: v => { state.auto = v; },
   onStorm: v => { ocean.storm = v; },
   onFoam: v => { ocean.foam = v; },
+  onGlitter: v => { ocean.glitter = v; },
   onReef: v => { ocean.reef = v; },
 });
 ocean.setTimeOfDay(state.tod);
