@@ -6,6 +6,7 @@ import { Post } from './fx/Post.js';
 import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
 import { TopDownControls } from './core/TopDownControls.js';
+import { Boat } from './boat/Boat.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -41,6 +42,11 @@ const ocean = new Ocean({ segments: isTouch ? 220 : 300 });
 const particles = new Particles(isTouch ? { glints: 70, petals: 50, specks: 90 } : {});
 const streaks = new WindStreaks(isTouch ? 5 : 7);
 scene.add(ocean.mesh, particles.points, streaks.mesh);
+
+// the tugboat: tap the sea to sail it there
+const boat = new Boat(ocean);
+scene.add(boat.group);
+boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
 const ambience = new Ambience();
@@ -91,15 +97,30 @@ window.addEventListener('keydown', firstGesture, { once: true });
 // --- touching the water makes ripples (foam by day, glow by night) ---------
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
 const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ocean.base);
-function rippleAt(e, strength) {
+function waterPoint(e) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  if (ray.ray.intersectPlane(waterPlane, hit) && hit.distanceTo(camera.position) < 90) ocean.addRipple(hit.x, hit.z, strength);
+  return ray.ray.intersectPlane(waterPlane, hit) && hit.distanceTo(camera.position) < 90 ? hit : null;
 }
-let pressed = false, lastTrail = 0;
-renderer.domElement.addEventListener('pointerdown', e => { pressed = true; rippleAt(e, 1); });
-window.addEventListener('pointerup', () => { pressed = false; });
+function rippleAt(e, strength) {
+  const p = waterPoint(e);
+  if (p) ocean.addRipple(p.x, p.z, strength);
+}
+let pressed = false, lastTrail = 0, down = null;
+renderer.domElement.addEventListener('pointerdown', e => {
+  pressed = true; rippleAt(e, 1);
+  if (e.isPrimary) down = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+window.addEventListener('pointerup', e => {
+  pressed = false;
+  // a quick tap (not a drag or pinch) sends the boat there
+  if (down && e.isPrimary && performance.now() - down.t < 400 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 10) {
+    const p = waterPoint(e);
+    if (p) boat.sailTo(p.x, p.z);
+  }
+  down = null;
+});
 renderer.domElement.addEventListener('pointermove', e => {
   if (!pressed || performance.now() - lastTrail < 140) return;
   lastTrail = performance.now(); rippleAt(e, 0.5);
@@ -112,14 +133,16 @@ controls.onStart = () => { interacting = true; idle = 0; };
 controls.onEnd = () => { interacting = false; idle = 0; };
 function drift(dt) {
   if (interacting) return;
-  if (idle === 0) { anchor.set(controls.center.x, controls.center.z); driftT = 0; }
+  if (idle === 0) driftT = 0;
   idle += dt;
+  // float around the boat, following it if it sails off
+  anchor.set(boat.position.x, boat.position.y);
   const w = THREE.MathUtils.smoothstep(idle, 4, 8);
   if (w <= 0) return;
   driftT += dt * w;
-  const a = driftT * 0.06, R = 10;
-  controls.center.x += (anchor.x + Math.sin(a) * R - controls.center.x) * Math.min(1, dt * 0.5);
-  controls.center.z += (anchor.y + (Math.cos(a) - 1) * R - controls.center.z) * Math.min(1, dt * 0.5);
+  const a = driftT * 0.06, R = 4;
+  controls.center.x += (anchor.x + Math.sin(a) * R - controls.center.x) * Math.min(1, dt * 0.5 * w);
+  controls.center.z += (anchor.y + (Math.cos(a) - 1) * R - controls.center.z) * Math.min(1, dt * 0.5 * w);
 }
 
 // --- sizing & adaptive quality ---------------------------------------------
@@ -178,6 +201,8 @@ renderer.setAnimationLoop(() => {
   drift(dt);
   controls.update(dt);
   ocean.update(dt, elapsed);
+  boat.update(dt, elapsed);
+  boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
   streaks.update(elapsed, ocean.storm, ocean.light);
@@ -189,4 +214,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, particles, post, ambience, quality };
