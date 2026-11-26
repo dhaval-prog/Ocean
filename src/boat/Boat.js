@@ -31,6 +31,8 @@ export class Boat {
     this.maxSpeed = 3.5;
     this.target = null;
     this.input = { throttle: 0, turn: 0 };   // keyboard driving: throttle −1…1, turn −1 (right)…1 (left)
+    this.frozen = false;                      // true while sinking / resurfacing: ignores steering
+    this.sinkY = 0; this.sinkRoll = 0; this.sinkPitch = 0;   // extra offsets driven by SinkSequence
     this.ready = false;
     this._wake = 0;
     this._glass = null;
@@ -99,8 +101,11 @@ export class Boat {
 
     // --- steering: turn toward the target, speed up, slow down on arrival
     let turn = 0;
-    const manual = this.input.throttle !== 0 || this.input.turn !== 0;
-    if (manual) {
+    const manual = !this.frozen && (this.input.throttle !== 0 || this.input.turn !== 0);
+    if (this.frozen) {
+      this.target = null;
+      this.speed += (0 - this.speed) * Math.min(1, dt * 3);
+    } else if (manual) {
       // keyboard: steer and throttle directly (turning works best with some way on)
       this.target = null;
       turn = this.input.turn;
@@ -130,6 +135,10 @@ export class Boat {
     this.group.rotation.y = this.heading;
     this.body.rotation.x = Math.sin(t * 1.1) * 0.05 + turn * 0.08 * (Math.abs(this.speed) / this.maxSpeed);   // roll
     this.body.rotation.z = Math.sin(t * 1.3 + 1.0) * 0.03 + 0.04 * (Math.max(0, this.speed) / this.maxSpeed);     // pitch
+    // sinking / resurfacing (SinkSequence)
+    this.group.position.y += this.sinkY;
+    this.body.rotation.x += this.sinkRoll;
+    this.body.rotation.z -= this.sinkPitch;
 
     // --- wake: V of foam + bow splash drawn by the water shader, plus the odd bubble drop
     this.ocean.setBoat(this.position.x, this.position.y, this.heading, Math.max(0, this.speed) / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
