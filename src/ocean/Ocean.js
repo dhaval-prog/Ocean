@@ -22,6 +22,7 @@ const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b
  *   ocean.update(dt, elapsed);           // every frame
  *   ocean.setTimeOfDay(2.5);             // 0 Dawn … 4 Night (wraps, blends)
  *   ocean.storm = 0.6;                   // 0 calm … 1 stormy
+ *   ocean.foam = 0.35;                   // 0 none … 1 original amount
  *   ocean.getHeightAt(x, z);             // water height for floating objects
  */
 export class Ocean {
@@ -30,6 +31,7 @@ export class Ocean {
     this.base = base;
     this.storm = 0.3;
     this.reef = false;
+    this.foam = 0.35; // 0 … 1 (1 = original look)
     this.flow = 0;
 
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -45,7 +47,7 @@ export class Ocean {
       uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 12 },
       uPalA: { value: TIMES[1].pal.map(hex) }, uPalB: { value: TIMES[1].pal.map(hex) },
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
-      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 },
+      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 },
       uSun: { value: new THREE.Vector2(-3, -6.5) },
     };
 
@@ -95,6 +97,7 @@ export class Ocean {
     const U = this.uniforms;
     U.uTime.value = elapsed;
     U.uStorm.value = this.storm;
+    U.uFoam.value = this.foam;
     this.flow += dt * (0.55 + 1.6 * this.storm);
     U.uFlow.value = this.flow;
     U.uReef.value += ((this.reef ? 1 : 0) - U.uReef.value) * Math.min(1, dt * 3);

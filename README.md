@@ -16,6 +16,7 @@ npm run build      # production build in dist/
 - **Endless-looking ocean**: a 140×140 surface whose edges haze into the sky, so it reads as open sea on any screen size.
 - **Time of day**: Dawn, Day, Sunset, Dusk and Night, blended with a far-to-near sweep, or cycled automatically.
 - **Sea state**: from calm to stormy (wave height, foam and speed).
+- **Foam**: amount of white foam lines (default 0.35; 1 = the original look). Storms add some back.
 - **Reef shallows** toggle.
 - **Touch + mouse camera**: drag to orbit, pinch or scroll to zoom, limited so you never go under the water.
 - **Responsive UI**: a floating card on desktop and a collapsible bottom sheet on phones; safe-area aware; installable (web manifest).

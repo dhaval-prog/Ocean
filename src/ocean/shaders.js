@@ -4,7 +4,7 @@
 export const GLSL_COMMON = /* glsl */ `
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
 uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
-uniform float uStorm; uniform float uReef; uniform vec2 uSun;
+uniform float uStorm; uniform float uReef; uniform float uFoam; uniform vec2 uSun;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
   return mix(mix(oc_hash(i), oc_hash(i+vec2(1,0)), u.x), mix(oc_hash(i+vec2(0,1)), oc_hash(i+vec2(1,1)), u.x), u.y); }
@@ -62,14 +62,17 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     // foam lines (+ storm, + night bioluminescent pulse & trails)
     vec2 fs = q*vec2(0.85, 2.8) + vec2(-fl*0.55, 0.0) + warp*2.2;
     float r1 = oc_ridge(fs), r2 = oc_ridge(fs*1.9 + 7.3 + vec2(-fl*0.3, 0.0));
-    float mask = smoothstep(0.42 - uStorm*0.25, 0.6 - uStorm*0.22, oc_fbm(s*0.4 + vec2(fl*0.04, 0.0) + 20.0))
+    // uFoam: 0 = almost none, 1 = original amount. Storms always add some back.
+    float foam = clamp(uFoam + uStorm*0.5, 0.0, 1.0);
+    float mask = smoothstep(0.42 + (1.0 - foam)*0.12 - uStorm*0.25, 0.6 + (1.0 - foam)*0.1 - uStorm*0.22, oc_fbm(s*0.4 + vec2(fl*0.04, 0.0) + 20.0))
                * (0.35 + 0.65*smoothstep(0.48, 0.6, v));
-    float lines = max(smoothstep(0.87 - uStorm*0.06, 0.95, r1), 0.7*smoothstep(0.93 - uStorm*0.05, 0.98, r2)) * mask;
+    float lines = max(smoothstep(0.87 + (1.0 - foam)*0.05 - uStorm*0.06, 0.95 + (1.0 - foam)*0.03, r1),
+                      0.7*foam*smoothstep(0.93 - uStorm*0.05, 0.98, r2)) * mask * mix(0.35, 1.0, foam);
     float trail = 0.0;
     for (int k = 1; k <= 4; k++) trail += smoothstep(0.88, 0.96, oc_ridge(fs + vec2(float(k)*0.13, 0.0))) * (1.0 - float(k)/5.0);
-    trail *= mask;
+    trail *= mask * foam;
     float pulse = 0.55 + 0.45*sin(t*2.2 + oc_noise(p*0.45)*6.283);
-    c = mix(c, pal[4], smoothstep(0.75, 0.9, r1)*mask*0.35);
+    c = mix(c, pal[4], smoothstep(0.75, 0.9, r1)*mask*0.35*foam);
     c = mix(c, pal[5], lines*0.95);
     c += pal[5]*(trail*0.22 + lines*pulse*0.7)*fx.z;
 
@@ -81,7 +84,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, pal[8], smoothstep(1.35, 1.1, dd)*fx.w*0.9);
     float path = smoothstep(2.8, 0.0, abs(p.x - uSun.x)) * smoothstep(uSun.y - 0.5, uSun.y + 2.5, p.y);
     float gl = smoothstep(0.80, 0.97, oc_ridge(vec2(p.x*4.5, p.y*1.5 - t*0.9))) * path;
-    c = mix(c, pal[7], gl*0.75*max(fx.w, 0.4));
+    c = mix(c, pal[7], gl*mix(0.35, 0.75, foam)*max(fx.w, 0.4));
 
     // sparkles with fading trails
     vec2 cell = floor(p*7.0); float st = t*1.5, sp = 0.0;

@@ -54,10 +54,11 @@ function applyLook() {
 // --- UI -----------------------------------------------------------------------
 const state = { tod: 1, auto: true };
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, auto: state.auto, storm: ocean.storm, reef: ocean.reef },
+  initial: { tod: state.tod, auto: state.auto, storm: ocean.storm, foam: ocean.foam, reef: ocean.reef },
   onTimeOfDay: v => { state.tod = v; state.auto = false; ocean.setTimeOfDay(v); applyLook(); },
   onAuto: v => { state.auto = v; },
   onStorm: v => { ocean.storm = v; },
+  onFoam: v => { ocean.foam = v; },
   onReef: v => { ocean.reef = v; },
 });
 applyLook();
