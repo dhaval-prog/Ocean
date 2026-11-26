@@ -3,7 +3,7 @@
 
 export const GLSL_COMMON = /* glsl */ `
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
-uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
+uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale; uniform vec2 uViewDir;
 uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter;
 uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
 uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1 | bow distance, half beam
@@ -28,7 +28,7 @@ export const GLSL_VERTEX = /* glsl */ `#include <begin_vertex>
 export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
   {
     vec2 p = vWPos.xz; float t = uTime, fl = uFlow;
-    float far = clamp(-(vWPos.z - cameraPosition.z)/uFarScale*0.5 + 0.5, 0.0, 1.0); // 1 = top of the screen
+    float far = clamp(dot(vWPos.xz - cameraPosition.xz, uViewDir)/uFarScale*0.5 + 0.5, 0.0, 1.0); // 1 = top of the screen
     // time-of-day sweep: far side changes first, light rolls toward the viewer
     float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
     vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);

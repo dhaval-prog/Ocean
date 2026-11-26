@@ -47,17 +47,14 @@ const GradeShader = {
 };
 
 export class Post {
-  constructor(renderer, scene, camera, { mobile = false } = {}) {
-    const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: mobile ? 0 : 4 });
+  constructor(renderer, scene, camera) {
+    // 4x MSAA everywhere (phones too) so edges and ink outlines stay smooth
+    const samples = renderer.capabilities.isWebGL2 ? Math.min(4, renderer.capabilities.maxSamples || 4) : 0;
+    const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples });
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new RenderPass(scene, camera));
     // threshold 1.0: only HDR highlights bloom (sun, moon, glints, night glow), not the bright sky
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.5, 1.0);
-    if (mobile) {
-      // bloom at half resolution on phones
-      const set = this.bloom.setSize.bind(this.bloom);
-      this.bloom.setSize = (w, h) => set(Math.max(1, w >> 1), Math.max(1, h >> 1));
-    }
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);

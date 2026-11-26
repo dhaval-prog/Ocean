@@ -9,6 +9,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const MODEL_SCALE = 0.3;     // model is ~14 units long → ~4 units on the sea
 const WATERLINE = 1.0;       // model-space height that sits at the water surface
 const BOW_TO_STERN = 6.0;    // model-space distance from centre to the stern (for the wake)
+const HULL_HALF_LENGTH = 1.7; // world units, bow / stern sample points for riding the waves
+const HULL_HALF_BEAM = 0.6;
 const FUNNEL_TOP = new THREE.Vector3(-1.49, 6.0, 0); // model-space top of the funnel (for smoke)
 
 function toonGradient() {
@@ -35,6 +37,7 @@ export class Boat {
     this.sinkY = 0; this.sinkRoll = 0; this.sinkPitch = 0;   // extra offsets driven by SinkSequence
     this.ready = false;
     this._wake = 0;
+    this._fy = 0; this._fp = 0; this._fr = 0; this._floatInit = false;   // smoothed wave height / pitch / roll
     this._glass = null;
   }
 
@@ -129,12 +132,26 @@ export class Boat {
     this.position.x += Math.cos(this.heading) * this.speed * dt;
     this.position.y -= Math.sin(this.heading) * this.speed * dt;
 
-    // --- floating: bob, roll into turns, lift the bow when moving
-    const base = this.ocean.base;
-    this.group.position.set(this.position.x, base + Math.sin(t * 1.6) * 0.04, this.position.y);
+    // --- floating: ride the actual waves. Sample the water under the bow,
+    // stern and both sides: the hull rises and falls with the surface, pitches
+    // with the slope along its length and rolls with the slope across it.
+    // Smoothed a little so it feels like a heavy hull, not a cork.
+    const O = this.ocean, ch = Math.cos(this.heading), sh = Math.sin(this.heading);
+    const L = HULL_HALF_LENGTH, Bm = HULL_HALF_BEAM, px = this.position.x, pz = this.position.y;
+    const hBow = O.getHeightAt(px + ch * L, pz - sh * L), hStern = O.getHeightAt(px - ch * L, pz + sh * L);
+    const hPort = O.getHeightAt(px - sh * Bm, pz - ch * Bm), hStar = O.getHeightAt(px + sh * Bm, pz + ch * Bm);
+    const hMid = O.getHeightAt(px, pz);
+    const waveY = (hBow + hStern + hPort + hStar + 2 * hMid) / 6;
+    const wavePitch = Math.atan2(hBow - hStern, 2 * L) * 1.4;   // a touch exaggerated so it reads from above
+    const waveRoll = Math.atan2(hPort - hStar, 2 * Bm) * 1.4;
+    const k = this._floatInit ? Math.min(1, dt * 5) : 1;
+    this._floatInit = true;
+    this._fy += (waveY - this._fy) * k; this._fp += (wavePitch - this._fp) * k; this._fr += (waveRoll - this._fr) * k;
+    const sp = Math.abs(this.speed) / this.maxSpeed;
+    this.group.position.set(px, this._fy + Math.sin(t * 1.6) * 0.02, pz);
     this.group.rotation.y = this.heading;
-    this.body.rotation.x = Math.sin(t * 1.1) * 0.05 + turn * 0.08 * (Math.abs(this.speed) / this.maxSpeed);   // roll
-    this.body.rotation.z = Math.sin(t * 1.3 + 1.0) * 0.03 + 0.04 * (Math.max(0, this.speed) / this.maxSpeed);     // pitch
+    this.body.rotation.x = this._fr + Math.sin(t * 1.1) * 0.025 + turn * 0.08 * sp;                       // roll
+    this.body.rotation.z = this._fp + Math.sin(t * 1.3 + 1.0) * 0.015 + 0.04 * (Math.max(0, this.speed) / this.maxSpeed); // pitch
     // sinking / resurfacing (SinkSequence)
     this.group.position.y += this.sinkY;
     this.body.rotation.x += this.sinkRoll;
