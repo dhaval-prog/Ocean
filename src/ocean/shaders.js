@@ -38,19 +38,19 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     vec2 rDisp = vec2(0.0); float rH = 0.0, rCrest = 0.0, rSplash = 0.0;
     for (int i = 0; i < 12; i++) {
       vec4 R = uRipples[i]; float age = t - R.z;
-      if (R.w <= 0.0 || age < 0.0 || age > 5.0) continue;
+      if (R.w <= 0.0 || age < 0.0 || age > 3.5) continue;
       vec2 dv = p - R.xy; float r = length(dv);
-      float front = age*2.4, width = 0.6 + age*0.9;
-      float env = exp(-pow((r - front*0.75)/width, 2.0)) * exp(-age*0.55) * R.w / (1.0 + r*0.2);
+      float front = age*2.4, width = 0.35 + age*0.3;           // narrow packet = 2-3 rings
+      float env = exp(-pow((r - front*0.75)/width, 2.0)) * exp(-age*1.0) * R.w / (1.0 + r*0.2);                    // short, quick ripple
       float wave = sin((r - front)*7.5) * env * smoothstep(front + 0.25, front, r);  // nothing ahead of the front
       rH += wave;
-      rDisp += (dv/max(r, 1e-3)) * wave * 0.22;
+      rDisp += (dv/max(r, 1e-3)) * wave * 0.06;                                   // only a slight bend
       rCrest += smoothstep(0.55, 0.85, wave/max(env, 1e-3)) * min(env*1.6, 1.0);                 // thin bright crest lines
       if (age < 0.6) {                                                              // splash on impact
         float k = age/0.6, a = atan(dv.y, dv.x);
         float drops = smoothstep(0.55, 0.9, cos(a*9.0 + R.x*3.0)) * smoothstep(0.14, 0.05, abs(r - (0.3 + k*1.4)));
         float dimple = smoothstep(0.35*(1.0 - k) + 0.01, 0.0, r)*0.6;
-        rSplash += (drops + dimple) * (1.0 - k) * R.w;
+        rSplash += (drops + dimple) * (1.0 - k) * R.w * 0.6;
       }
     }
     p += rDisp;
@@ -100,9 +100,10 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
 
 
     // drop ripples: crests catch the light, troughs darken; foam by day, glow by night
-    c *= 1.0 + rH*0.28;
-    c = mix(c, pal[5], clamp(rCrest*0.85 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
-    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.9 + rSplash)*fx.z*1.3;
+    // kept faint so the rings sit quietly on the surface
+    c *= 1.0 + rH*0.1;
+    c = mix(c, pal[5], clamp(rCrest*0.4 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
+    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.45 + rSplash)*fx.z*1.1;
 
     // foam rings around floating objects (boats, players)
     float rg = 0.0, rf = 0.0;
