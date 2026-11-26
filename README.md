@@ -50,5 +50,5 @@ src/
 public/models/       tugboat.glb / .mtl, plus the original stylized-ocean.glb / .mtl exports
 ```
 
-`ocean.getHeightAt(x, z)` returns the live water height, `ocean.addRipple(x, z)` makes a splash, and `ocean.setObjects([{ x, z, radius }])` draws foam rings around up to 4 floating objects (boats, players).
+`ocean.getHeightAt(x, z)` returns the live water height, `ocean.addRipple(x, z)` makes a splash, `ocean.setBoat(x, z, heading, speed01)` draws a boat wake, and `ocean.setObjects([{ x, z, radius }])` draws foam rings around up to 4 floating objects (boats, players).
 For console access, `window.oceanApp` exposes `{ scene, camera, ocean, ... }`.
