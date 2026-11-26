@@ -30,6 +30,7 @@ export class Boat {
     this.speed = 0;
     this.maxSpeed = 3.5;
     this.target = null;
+    this.input = { throttle: 0, turn: 0 };   // keyboard driving: throttle −1…1, turn −1 (right)…1 (left)
     this.ready = false;
     this._wake = 0;
     this._glass = null;
@@ -80,6 +81,16 @@ export class Boat {
     return this;
   }
 
+  /** Speed as 0 … 1 (forward or reverse), for sound and smoke. */
+  get throttle01() { return Math.min(1, Math.abs(this.speed) / this.maxSpeed); }
+
+  /** Where the boat is on screen (CSS pixels) and roughly how big it looks there. */
+  screenInfo(camera, dom) {
+    const r = dom.getBoundingClientRect(), v = new THREE.Vector3(this.position.x, this.ocean.base + 0.4, this.position.y).project(camera);
+    const e = new THREE.Vector3(this.position.x + 2, this.ocean.base + 0.4, this.position.y).project(camera);
+    return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, radius: Math.abs(e.x - v.x) / 2 * r.width };
+  }
+
   /** Sail to a point on the sea. */
   sailTo(x, z) { this.target = new THREE.Vector2(x, z); }
 
@@ -88,7 +99,15 @@ export class Boat {
 
     // --- steering: turn toward the target, speed up, slow down on arrival
     let turn = 0;
-    if (this.target) {
+    const manual = this.input.throttle !== 0 || this.input.turn !== 0;
+    if (manual) {
+      // keyboard: steer and throttle directly (turning works best with some way on)
+      this.target = null;
+      turn = this.input.turn;
+      this.heading += turn * dt * (0.6 + 0.9 * Math.min(1, Math.abs(this.speed) / this.maxSpeed + 0.3));
+      const goal = this.input.throttle >= 0 ? this.input.throttle * this.maxSpeed : this.input.throttle * this.maxSpeed * 0.35;
+      this.speed += (goal - this.speed) * Math.min(1, dt * 1.2);
+    } else if (this.target) {
       const dx = this.target.x - this.position.x, dz = this.target.y - this.position.y;
       const dist = Math.hypot(dx, dz);
       const want = Math.atan2(-dz, dx);                       // screen-up is −z
@@ -109,11 +128,11 @@ export class Boat {
     const base = this.ocean.base;
     this.group.position.set(this.position.x, base + Math.sin(t * 1.6) * 0.04, this.position.y);
     this.group.rotation.y = this.heading;
-    this.body.rotation.x = Math.sin(t * 1.1) * 0.05 + turn * 0.08 * (this.speed / this.maxSpeed);   // roll
-    this.body.rotation.z = Math.sin(t * 1.3 + 1.0) * 0.03 + 0.04 * (this.speed / this.maxSpeed);     // pitch
+    this.body.rotation.x = Math.sin(t * 1.1) * 0.05 + turn * 0.08 * (Math.abs(this.speed) / this.maxSpeed);   // roll
+    this.body.rotation.z = Math.sin(t * 1.3 + 1.0) * 0.03 + 0.04 * (Math.max(0, this.speed) / this.maxSpeed);     // pitch
 
     // --- wake: V of foam + bow splash drawn by the water shader, plus the odd bubble drop
-    this.ocean.setBoat(this.position.x, this.position.y, this.heading, this.speed / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
+    this.ocean.setBoat(this.position.x, this.position.y, this.heading, Math.max(0, this.speed) / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
     if (this.speed > 0.6 && (this._wake -= dt) <= 0) {
       this._wake = 0.45;
       const back = BOW_TO_STERN * MODEL_SCALE;

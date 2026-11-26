@@ -114,13 +114,48 @@ function rippleAt(e, strength) {
   if (p) ocean.addRipple(p.x, p.z, strength);
 }
 let pressed = false, lastTrail = 0, down = null;
+
+// --- steering: press on (or right next to) the boat and drag -------------------
+// The boat follows your finger while you hold; let go and it carries on to that
+// spot. A quick tap on the boat sounds the horn. This gesture runs before the
+// camera's, so the view does not pan while you steer.
+let steer = null;
+function honk() {
+  ambience.horn();
+  smoke.burst(boat.funnelWorld(), boat.heading, 3);
+}
+app.addEventListener('pointerdown', e => {
+  if (e.target !== renderer.domElement || !boat.ready || !e.isPrimary) return;
+  const s = boat.screenInfo(camera, renderer.domElement);
+  if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > Math.max(38, s.radius * 1.25)) return;
+  steer = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, last: null };
+  controls.enabled = false;            // this gesture belongs to the boat
+}, { capture: true });
+window.addEventListener('pointermove', e => {
+  if (!steer || e.pointerId !== steer.id) return;
+  steer.moved = Math.max(steer.moved, Math.hypot(e.clientX - steer.x, e.clientY - steer.y));
+  if (steer.moved < 8) return;
+  const p = waterPoint(e);
+  if (p) { boat.sailTo(p.x, p.z); steer.last = { x: p.x, z: p.z }; marker.hide(); setFollow(true); }
+});
+function endSteer(e) {
+  if (!steer || e.pointerId !== steer.id) return;
+  if (steer.moved < 8) honk();
+  else if (steer.last) marker.place(steer.last.x, steer.last.z, ocean.base);
+  steer = null;
+  controls.enabled = true;
+}
+window.addEventListener('pointerup', endSteer);
+window.addEventListener('pointercancel', endSteer);
+
 renderer.domElement.addEventListener('pointerdown', e => {
+  if (steer) return;
   pressed = true; rippleAt(e, 1);
   if (e.isPrimary) down = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
 window.addEventListener('pointerup', e => {
   pressed = false;
-  // a quick tap (not a drag or pinch) sends the boat there
+  // a quick tap on the water (not a drag or pinch) sends the boat there
   if (down && e.isPrimary && performance.now() - down.t < 400 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 10) {
     const p = waterPoint(e);
     if (p) { boat.sailTo(p.x, p.z); marker.place(p.x, p.z, ocean.base); setFollow(true); }
@@ -128,9 +163,28 @@ window.addEventListener('pointerup', e => {
   down = null;
 });
 renderer.domElement.addEventListener('pointermove', e => {
-  if (!pressed || performance.now() - lastTrail < 140) return;
+  if (steer || !pressed || performance.now() - lastTrail < 140) return;
   lastTrail = performance.now(); rippleAt(e, 0.5);
 });
+
+// --- keyboard (desktop): arrows / WASD to drive, Space for the horn ----------
+const keys = new Set();
+const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+function applyKeys() {
+  boat.input.throttle = (keys.has('up') ? 1 : 0) - (keys.has('down') ? 1 : 0);
+  boat.input.turn = (keys.has('left') ? 1 : 0) - (keys.has('right') ? 1 : 0);
+}
+window.addEventListener('keydown', e => {
+  if (e.target.closest?.('input, button, textarea, select')) return;   // let sliders keep their arrow keys
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) honk(); return; }
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  keys.add(k); applyKeys();
+  marker.hide(); setFollow(true);
+});
+window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys.delete(k); applyKeys(); } });
+window.addEventListener('blur', () => { keys.clear(); applyKeys(); });
 
 // --- follow mode: the camera keeps the boat in view ---------------------------
 // On by default and whenever you send the boat somewhere; dragging the view
@@ -236,7 +290,8 @@ renderer.setAnimationLoop(() => {
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);
   smoke.setLight(ocean.light);
-  smoke.update(dt, { funnel: boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.speed / boat.maxSpeed });
+  smoke.update(dt, { funnel: boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01 });
+  ambience.setEngine(boat.throttle01);
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });

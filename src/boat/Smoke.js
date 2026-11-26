@@ -80,21 +80,28 @@ export class Smoke {
   emit(at, back, speed01) {
     const p = this.puffs[this.next++ % MAX];
     p.age = 0;
-    p.life = 1.6 + Math.random() * 0.8 + speed01 * 0.6;
+    p.life = 0.9 + Math.random() * 0.4 + speed01 * 0.3;        // shorter trail
     p.p.copy(at);
     // up, plus blown back behind the boat as it moves, plus a little wobble
-    p.vel.set(back.x * (0.4 + speed01 * 2.2) + (Math.random() - 0.5) * 0.7, 0.8 + Math.random() * 0.6, back.y * (0.4 + speed01 * 2.2) + (Math.random() - 0.5) * 0.7);
+    p.vel.set(back.x * (0.3 + speed01 * 1.4) + (Math.random() - 0.5) * 0.7, 0.8 + Math.random() * 0.6, back.y * (0.3 + speed01 * 1.4) + (Math.random() - 0.5) * 0.7);
     const big = 0.7 + Math.random() * 0.6;                 // every puff a bit different
     p.start = (0.18 + speed01 * 0.12) * big;
     p.end = (0.8 + speed01 * 0.6 + Math.random() * 0.35) * big;
   }
 
+  /** A quick burst of puffs (used with the horn). */
+  burst(funnel, heading, n = 3) {
+    if (!funnel) return;
+    const back = new THREE.Vector2(-Math.cos(heading), Math.sin(heading));
+    for (let i = 0; i < n; i++) this.emit(funnel, back, 0.4 + i * 0.2);
+  }
+
   update(dt, { funnel, heading, speed01 }) {
     // emit: steady puffs while running, the odd lazy puff when idle
-    const running = speed01 > 0.05, interval = THREE.MathUtils.lerp(0.38, 0.14, speed01) * (0.7 + Math.random() * 0.6);
+    const running = speed01 > 0.05, interval = THREE.MathUtils.lerp(0.65, 0.3, speed01) * (0.7 + Math.random() * 0.6);   // fewer puffs
     this.timer = Math.min(this.timer - dt, running ? interval : Infinity);   // start puffing as soon as it moves
     if (funnel && this.timer <= 0) {
-      this.timer = running ? interval : 1.4 + Math.random();
+      this.timer = running ? interval : 2.5 + Math.random() * 1.5;
       const back = new THREE.Vector2(-Math.cos(heading), Math.sin(heading));
       this.emit(funnel, back, speed01);
     }
@@ -109,7 +116,7 @@ export class Smoke {
       this.pos.set([p.p.x, p.p.y, p.p.z], i * 3);
       const pop = Math.min(1, p.age / 0.12);                // quick pop-in
       this.size[i] = THREE.MathUtils.lerp(p.start, p.end, Math.sqrt(k)) * (0.6 + 0.4 * pop);
-      this.alpha[i] = pop * (1 - k * k) * 0.95;
+      this.alpha[i] = pop * (1 - k * k) * 0.5;               // lighter
     }
     this.posAttr.needsUpdate = this.sizeAttr.needsUpdate = this.alphaAttr.needsUpdate = true;
   }

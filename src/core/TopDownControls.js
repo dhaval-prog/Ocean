@@ -15,6 +15,7 @@ export class TopDownControls {
     this.dragging = false;
     this.onStart = null; this.onEnd = null;
     this.onPan = null;   // called once per gesture when the view is actually dragged
+    this.enabled = true; // set false to let another gesture (e.g. steering the boat) own the pointer
     this._ray = new THREE.Raycaster();
     this._plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ground);
 
@@ -29,6 +30,7 @@ export class TopDownControls {
     };
 
     dom.addEventListener('pointerdown', e => {
+      if (!this.enabled) return;
       dom.setPointerCapture?.(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       last = gesture();
