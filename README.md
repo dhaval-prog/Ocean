@@ -33,7 +33,7 @@ src/
   main.js            renderer, camera, lights, loop
   ocean/Ocean.js     Ocean class: mesh, setTimeOfDay(), storm, reef, getHeightAt(x, z)
   ocean/shaders.js   GLSL for the water (ported from Ocean_Standalone.html)
-  ocean/palettes.js  time-of-day colour + sky presets
+  ocean/palettes.js  time-of-day colours + ambient particle presets
   fx/Particles.js    glints, petals, specks (one batch)
   fx/WindStreaks.js  screen-space wind lines
   fx/Post.js         bloom + ink outlines + colour grading + vignette
