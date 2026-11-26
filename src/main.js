@@ -9,6 +9,7 @@ import { TopDownControls } from './core/TopDownControls.js';
 import { Boat } from './boat/Boat.js';
 import { Marker } from './boat/Marker.js';
 import { Smoke } from './boat/Smoke.js';
+import { SinkSequence } from './boat/SinkSequence.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -52,6 +53,21 @@ const marker = new Marker();
 const smoke = new Smoke();
 scene.add(boat.group, marker.group, smoke.points);
 const funnelPos = new THREE.Vector3();
+
+// click the boat: it sinks, a paper flies up and onto the screen; flick it back to get the boat back
+const seqUI = document.getElementById('seq-ui'), seqHint = document.getElementById('seq-hint'), seqThrow = document.getElementById('seq-throw');
+const SEQ_HINTS = { sink: 'Glug glug… going down', card: 'Drag and flick the paper back into the sea', held: 'Let go with a flick to throw it' };
+const seq = new SinkSequence({
+  scene, camera, dom: renderer.domElement, boat, ocean,
+  onChange: mode => {
+    controls.enabled = mode === 'idle';                // the camera holds still during the sequence
+    if (mode !== 'idle') marker.hide();
+    seqHint.textContent = SEQ_HINTS[mode] || '';
+    seqThrow.hidden = !(mode === 'card' || mode === 'held');
+    seqUI.hidden = !seqHint.textContent && seqThrow.hidden;
+  },
+});
+seqThrow.addEventListener('click', e => { e.stopPropagation(); seq.throwBack(); });
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
@@ -125,7 +141,7 @@ function honk() {
   smoke.burst(boat.funnelWorld(), boat.heading, 3);
 }
 app.addEventListener('pointerdown', e => {
-  if (e.target !== renderer.domElement || !boat.ready || !e.isPrimary) return;
+  if (e.target !== renderer.domElement || !boat.ready || !e.isPrimary || seq.active) return;
   const s = boat.screenInfo(camera, renderer.domElement);
   if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > Math.max(38, s.radius * 1.25)) return;
   steer = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, last: null };
@@ -140,16 +156,16 @@ window.addEventListener('pointermove', e => {
 });
 function endSteer(e) {
   if (!steer || e.pointerId !== steer.id) return;
-  if (steer.moved < 8) honk();
+  if (steer.moved < 8) seq.start();            // a tap on the boat sinks it
   else if (steer.last) marker.place(steer.last.x, steer.last.z, ocean.base);
   steer = null;
-  controls.enabled = true;
+  controls.enabled = !seq.active;
 }
 window.addEventListener('pointerup', endSteer);
 window.addEventListener('pointercancel', endSteer);
 
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (steer) return;
+  if (steer || seq.active) return;
   pressed = true; rippleAt(e, 1);
   if (e.isPrimary) down = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
@@ -177,6 +193,8 @@ function applyKeys() {
 window.addEventListener('keydown', e => {
   if (e.target.closest?.('input, button, textarea, select')) return;   // let sliders keep their arrow keys
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) honk(); return; }
+  if (e.code === 'Escape' && seq.active) { seq.throwBack(); return; }
+  if (seq.active) return;
   const k = KEYMAP[e.code];
   if (!k) return;
   e.preventDefault();
@@ -217,7 +235,7 @@ const anchor = new THREE.Vector2();
 controls.onStart = () => { interacting = true; idle = 0; };
 controls.onEnd = () => { interacting = false; idle = 0; };
 function drift(dt) {
-  if (interacting || follow) { idle = 0; return; }
+  if (interacting || follow || seq.active) { idle = 0; return; }
   if (idle === 0) { driftT = 0; anchor.set(controls.center.x, controls.center.z); }
   idle += dt;
   const w = THREE.MathUtils.smoothstep(idle, 4, 8);
@@ -286,11 +304,12 @@ renderer.setAnimationLoop(() => {
   followBoat(dt);
   controls.update(dt);
   ocean.update(dt, elapsed);
+  seq.update(dt, performance.now());
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);
   smoke.setLight(ocean.light);
-  smoke.update(dt, { funnel: boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01 });
+  smoke.update(dt, { funnel: boat.frozen ? null : boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01 });
   ambience.setEngine(boat.throttle01);
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
@@ -304,4 +323,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, seq, particles, post, ambience, quality };
