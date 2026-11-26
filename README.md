@@ -3,6 +3,8 @@
 A mobile + desktop web app built on a stylized, shader-driven 3D ocean (three.js + Vite).
 This is the foundation for an upcoming game + chat experience.
 
+**Live:** https://ocean-world-dhaval.vercel.app (deploys automatically from `main` via Vercel)
+
 ## Run
 
 ```bash
