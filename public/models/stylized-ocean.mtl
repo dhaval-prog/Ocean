@@ -1,0 +1,19 @@
+# Exported by three-d-stage
+newmtl water_surface
+Kd 1.0000 1.0000 1.0000
+Ks 0.2000 0.2000 0.2000
+Ns 30
+d 1.0000
+
+newmtl water_depth
+Kd 0.0058 0.0075 0.0613
+Ks 0.2000 0.2000 0.2000
+Ns 100
+d 1.0000
+
+newmtl sea_floor
+Kd 0.0021 0.0024 0.0190
+Ks 0.2000 0.2000 0.2000
+Ns 20
+d 1.0000
+

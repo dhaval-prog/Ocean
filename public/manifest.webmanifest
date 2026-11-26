@@ -1,0 +1,10 @@
+{
+  "name": "Ocean",
+  "short_name": "Ocean",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#d8f1f3",
+  "theme_color": "#1e5cc0",
+  "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
