@@ -15,7 +15,7 @@ npm run build      # production build in dist/
 
 ## What's here
 
-- **Top view only**: the camera looks straight down. Drag to pan, pinch or scroll to zoom; panning glides to a stop and stays inside the ocean.
+- **Tilted view**: the camera looks down at the sea at 60° from the horizon (set with `pitch` in `main.js`; 90 = straight down). Drag to pan (the water stays under your finger), pinch or scroll to zoom; panning glides to a stop and stays inside the play area.
 - **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
 - **Tugboat**: a cel-shaded, outlined tugboat bobs on the sea. Tap the water and it turns and sails there, rolling into turns and leaving a trail of small drops behind it; its windows glow at night. When you leave it alone, the view slowly floats around the boat. Model: `public/models/tugboat.glb`.
 - **Drops in the water**: tapping (or something dropping in on its own every few seconds) makes a realistic drop: a quick splash of droplets, then 2–3 small, faint concentric rings (about 2 units across at most) that barely bend the water and fade within about 2 seconds. White by day, glowing at night; at night the sea also glows by itself in patches.
@@ -40,7 +40,7 @@ src/
   fx/Post.js         bloom + ink outlines + colour grading + vignette
   audio/Ambience.js  generated waves / wind / music
   core/AutoQuality.js adaptive pixel ratio
-  core/TopDownControls.js top-down pan / zoom camera
+  core/TopDownControls.js tilted pan / zoom camera (pitch, default 60°)
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, wake
   ui/controls.js     settings panel
 public/models/       tugboat.glb / .mtl, plus the original stylized-ocean.glb / .mtl exports

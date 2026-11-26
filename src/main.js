@@ -26,8 +26,9 @@ app.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 
-// Top view only: drag to pan, pinch / scroll to zoom.
-const controls = new TopDownControls(camera, renderer.domElement, { height: isTouch ? 26 : 32 });
+// Tilted view: drag to pan, pinch / scroll to zoom.
+// looking down at 60° from the horizon; bound keeps the far edge of the ocean out of view
+const controls = new TopDownControls(camera, renderer.domElement, { height: isTouch ? 26 : 32, pitch: 60, bound: 40 });
 controls.update(0);
 
 // --- lights (scaled by time of day) ----------------------------------------
@@ -38,7 +39,7 @@ const lights = [
 ].map(([l, p]) => { if (p) l.position.set(...p); l.userData.base = l.intensity; scene.add(l); return l; });
 
 // --- world ------------------------------------------------------------------
-const ocean = new Ocean({ segments: isTouch ? 220 : 300 });
+const ocean = new Ocean({ size: 500, segments: isTouch ? 260 : 340 }); // big enough that the tilted view never reaches its edge
 const particles = new Particles(isTouch ? { glints: 70, petals: 50, specks: 90 } : {});
 const streaks = new WindStreaks(isTouch ? 5 : 7);
 scene.add(ocean.mesh, particles.points, streaks.mesh);
