@@ -1,12 +1,11 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Ocean } from './ocean/Ocean.js';
-import { Sky } from './sky/Sky.js';
 import { Particles } from './fx/Particles.js';
 import { WindStreaks } from './fx/WindStreaks.js';
 import { Post } from './fx/Post.js';
 import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
+import { TopDownControls } from './core/TopDownControls.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -24,20 +23,11 @@ renderer.domElement.className = 'scene';
 app.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
-camera.position.set(0, 7, 22);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 3, -8);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.enablePan = false;
-controls.minDistance = 8;
-controls.maxDistance = 60;
-controls.minPolarAngle = 0.45;
-controls.maxPolarAngle = 1.5; // look at the horizon, never under the surface
-controls.rotateSpeed = isTouch ? 0.6 : 0.8;
-controls.update();
+// Top view only: drag to pan, pinch / scroll to zoom.
+const controls = new TopDownControls(camera, renderer.domElement, { height: isTouch ? 26 : 32 });
+controls.update(0);
 
 // --- lights (scaled by time of day) ----------------------------------------
 const lights = [
@@ -48,10 +38,9 @@ const lights = [
 
 // --- world ------------------------------------------------------------------
 const ocean = new Ocean({ segments: isTouch ? 220 : 300 });
-const sky = new Sky(ocean.uniforms);
 const particles = new Particles(isTouch ? { glints: 70, petals: 50, specks: 90 } : {});
 const streaks = new WindStreaks(isTouch ? 5 : 7);
-scene.add(sky.backdrop, ocean.mesh, particles.points, streaks.mesh);
+scene.add(ocean.mesh, particles.points, streaks.mesh);
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
 const ambience = new Ambience();
@@ -63,9 +52,7 @@ function applyLook() {
   root.style.setProperty('--sky-top', '#' + ocean.skyTopColor.getHexString());
   root.dataset.dark = ocean.light < 0.6 ? '1' : '0';
   for (const l of lights) l.intensity = l.userData.base * ocean.light;
-  const L = ocean.look, S = sky.uniforms;
-  S.uSunDir.value.copy(L.sunDir); S.uMoon.value = L.moon; S.uRays.value = L.rays; S.uStars.value = L.stars; S.uLight.value = ocean.light;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#' + ocean.skyTopColor.getHexString());
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#' + ocean.uniforms.uPalB.value[1].getHexString());
 }
 
 // --- UI -----------------------------------------------------------------------
@@ -118,23 +105,21 @@ renderer.domElement.addEventListener('pointermove', e => {
   lastTrail = performance.now(); rippleAt(e, 0.5);
 });
 
-// --- slow cinematic camera drift when idle ---------------------------------
+// --- slow drift when idle: the view floats in a lazy circle -----------------
 let idle = 0, interacting = false, driftT = 0;
-controls.addEventListener('start', () => { interacting = true; idle = 0; });
-controls.addEventListener('end', () => { interacting = false; idle = 0; });
-const sph = new THREE.Spherical(), offset = new THREE.Vector3();
+const anchor = new THREE.Vector2();
+controls.onStart = () => { interacting = true; idle = 0; };
+controls.onEnd = () => { interacting = false; idle = 0; };
 function drift(dt) {
   if (interacting) return;
+  if (idle === 0) { anchor.set(controls.center.x, controls.center.z); driftT = 0; }
   idle += dt;
-  const w = THREE.MathUtils.smoothstep(idle, 5, 9);
+  const w = THREE.MathUtils.smoothstep(idle, 4, 8);
   if (w <= 0) return;
   driftT += dt * w;
-  offset.copy(camera.position).sub(controls.target);
-  sph.setFromVector3(offset);
-  const goal = Math.sin(driftT * 0.05) * 0.35; // sway either side of the sun
-  sph.theta += (goal - sph.theta) * Math.min(1, dt * 0.25 * w);
-  sph.phi += (1.44 - sph.phi) * Math.min(1, dt * 0.1 * w);
-  camera.position.copy(controls.target).add(offset.setFromSpherical(sph));
+  const a = driftT * 0.06, R = 10;
+  controls.center.x += (anchor.x + Math.sin(a) * R - controls.center.x) * Math.min(1, dt * 0.5);
+  controls.center.z += (anchor.y + (Math.cos(a) - 1) * R - controls.center.z) * Math.min(1, dt * 0.5);
 }
 
 // --- sizing & adaptive quality ---------------------------------------------
@@ -143,13 +128,12 @@ function applySize() {
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(W, H, false);
   post.setSize(W, H, pixelRatio);
-  sky.setSize(W * pixelRatio, H * pixelRatio, isTouch ? 0.5 : 0.75);
   streaks.setSize(W * pixelRatio, H * pixelRatio);
 }
 function resize() {
   W = app.clientWidth || 1; H = app.clientHeight || 1;
   camera.aspect = W / H;
-  camera.fov = W < H ? 58 : 45; // portrait phones see more sky and sea
+  camera.fov = W < H ? 62 : 40; // portrait phones need a wider view to see enough sea
   camera.updateProjectionMatrix();
   applySize();
 }
@@ -180,24 +164,22 @@ renderer.setAnimationLoop(() => {
   // at night the sea glows by itself in random patches near the view
   if (L.night > 0.3 && (glowTimer -= dt) <= 0) {
     glowTimer = 0.5 + Math.random() * 0.8;
-    const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 22;
-    ocean.addRipple(controls.target.x + Math.cos(a) * r, controls.target.z + Math.sin(a) * r * 0.7, 0.35 * L.night);
+    const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 13;
+    ocean.addRipple(controls.center.x + Math.cos(a) * r, controls.center.z + Math.sin(a) * r * 0.7, 0.35 * L.night);
   }
 
+  drift(dt);
+  controls.update(dt);
   ocean.update(dt, elapsed);
-  sky.uniforms.uStorm.value = ocean.storm;
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
-  particles.update(elapsed, { center: controls.target, look: L, storm: ocean.storm, pixelRatio, glintColor });
+  particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
   streaks.update(elapsed, ocean.storm, ocean.light);
   post.update(L.night, ocean.storm);
   ambience.update(ocean.storm, L.night);
 
-  drift(dt);
-  controls.update();
-  sky.render(renderer, camera);
   post.render(dt);
   quality.tick(dt);
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, sky, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, particles, post, ambience, quality };

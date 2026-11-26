@@ -21,9 +21,9 @@ void main() {
     a = sin(lt*3.14159) * uAmt.x; size = 0.22;
   } else if (aKind < 1.5) {     // petal: carried by the wind, slowly sinking
     float sp = 1.4 + aSeed.w*1.2 + uStorm*2.0;
-    p = vec3(aSeed.x*uTile + t*sp, uWater + 1.0 + mod(aSeed.z*9.0 - t*0.25*(0.5 + aSeed.w), 9.0), aSeed.y*uTile + sin(t*0.6 + aSeed.z*30.0)*1.5);
+    p = vec3(aSeed.x*uTile + t*sp, uWater + 0.6 + mod(aSeed.z*4.0 - t*0.12*(0.5 + aSeed.w), 4.0), aSeed.y*uTile + sin(t*0.6 + aSeed.z*30.0)*1.5);
     p.y += sin(t*1.7 + aSeed.w*40.0)*0.25;
-    a = uAmt.y * smoothstep(uWater + 1.0, uWater + 2.0, p.y); size = 0.32;
+    a = uAmt.y * smoothstep(uWater + 0.6, uWater + 1.2, p.y); size = 0.45;
   } else {                      // speck: slow falling snow
     p = vec3(aSeed.x*uTile + t*0.3, uWater + mod(aSeed.z*12.0 - t*(0.35 + aSeed.w*0.3), 12.0), aSeed.y*uTile);
     p.x += sin(t*0.9 + aSeed.w*30.0)*0.4;
