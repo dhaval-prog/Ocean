@@ -17,7 +17,7 @@ npm run build      # production build in dist/
 
 - **Top view only**: the camera looks straight down. Drag to pan, pinch or scroll to zoom; panning glides to a stop and stays inside the ocean.
 - **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
-- **Drops in the water**: tapping (or something dropping in on its own every few seconds) makes a realistic drop: a quick splash of droplets, then 2–3 faint concentric rings that spread out quickly, barely bend the water and fade within a few seconds. White by day, glowing at night; at night the sea also glows by itself in patches.
+- **Drops in the water**: tapping (or something dropping in on its own every few seconds) makes a realistic drop: a quick splash of droplets, then 2–3 small, faint concentric rings (about 2 units across at most) that barely bend the water and fade within about 2 seconds. White by day, glowing at night; at night the sea also glows by itself in patches.
 - **Ambient life**: lights drifting up off the water (dusk/night), petals on the wind (dawn/sunset), specks at night, cartoon wind lines.
 - **Finishing pass**: ink outlines (edge detection), bloom on the brightest highlights, saturated colour grading and a vignette.
 - **Idle drift**: after a few seconds without input the view floats slowly in a lazy circle.
