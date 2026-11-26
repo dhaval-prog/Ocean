@@ -17,7 +17,7 @@ const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b
 /**
  * A large stylized ocean surface that fades into the sky at its edges.
  *
- *   const ocean = new Ocean({ size: 140 });
+ *   const ocean = new Ocean();
  *   scene.add(ocean.mesh);
  *   ocean.update(dt, elapsed);           // every frame
  *   ocean.setTimeOfDay(2.5);             // 0 Dawn … 4 Night (wraps, blends)
@@ -26,7 +26,7 @@ const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b
  *   ocean.getHeightAt(x, z);             // water height for floating objects
  */
 export class Ocean {
-  constructor({ size = 140, segments = 280, base = 1.2, fade = size * 0.32 } = {}) {
+  constructor({ size = 300, segments = 300, base = 1.2, fade = size * 0.2 } = {}) {
     this.size = size;
     this.base = base;
     this.storm = 0.3;
@@ -49,6 +49,8 @@ export class Ocean {
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
       uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 },
       uSun: { value: new THREE.Vector2(-3, -6.5) },
+      uRipples: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -99, 0)) },
+      uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
@@ -73,6 +75,10 @@ export class Ocean {
     this.skyTopColor = new THREE.Color();
     this.light = 1;
     this.timeName = 'Day';
+    this.look = { sunDir: new THREE.Vector3(), moon: 0, rays: 0, stars: 0, petals: 0, specks: 0, glints: 0, night: 0 };
+    this._ripple = 0;
+    // Where the default camera sits; the water's sun reflection is placed for this view.
+    this.viewer = new THREE.Vector3(0, 7, 22);
     this._tmp = new THREE.Color();
     this.setTimeOfDay(1);
   }
@@ -89,6 +95,14 @@ export class Ocean {
     this.skyColor.set(TIMES[i].pal[9]).lerp(this._tmp.set(TIMES[j].pal[9]), e);
     this.skyTopColor.set(TIMES[i].pal[2]).lerp(this._tmp.set(TIMES[j].pal[2]), e).lerp(this.skyColor, 0.55);
     this.light = TIMES[i].light + (TIMES[j].light - TIMES[i].light) * e;
+    const L = this.look, A = TIMES[i].sky, B = TIMES[j].sky, lerp = (a, b) => a + (b - a) * e;
+    for (const key of ['moon', 'rays', 'stars', 'petals', 'specks', 'glints']) L[key] = lerp(A[key], B[key]);
+    L.night = lerp(TIMES[i].fx[2], TIMES[j].fx[2]);
+    const el = lerp(A.el, B.el);
+    L.sunDir.set(-0.09 * Math.cos(el), Math.sin(el), -Math.cos(el)).normalize();
+    // Put the sun/moon reflection on the water where the default view would see it.
+    const h = this.viewer.y - this.base, dist = Math.min(50, Math.max(8, h / Math.tan(Math.max(el, 0.02))));
+    U.uSun.value.set(this.viewer.x - 0.09 * dist, this.viewer.z - dist);
     this.timeName = TIMES[Math.round(f) % n].name;
     this.timeOfDay = f;
   }
@@ -101,6 +115,23 @@ export class Ocean {
     this.flow += dt * (0.55 + 1.6 * this.storm);
     U.uFlow.value = this.flow;
     U.uReef.value += ((this.reef ? 1 : 0) - U.uReef.value) * Math.min(1, dt * 3);
+  }
+
+  /** Splash at (x, z): an expanding ring (foam by day, glow by night). */
+  addRipple(x, z, strength = 1) {
+    const r = this.uniforms.uRipples.value[this._ripple++ % 8];
+    r.set(x, z, this.uniforms.uTime.value, strength);
+  }
+
+  /**
+   * Foam rings for floating objects (boats, players). Up to 4.
+   * @param {{x:number, z:number, radius?:number}[]} list
+   */
+  setObjects(list) {
+    this.uniforms.uObjects.value.forEach((o, i) => {
+      const it = list[i];
+      if (it) o.set(it.x, it.z, it.radius ?? 1, 1); else o.w = 0;
+    });
   }
 
   /** World-space water height at (x, z): matches the vertex shader. */
