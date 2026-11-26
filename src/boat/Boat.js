@@ -9,6 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const MODEL_SCALE = 0.3;     // model is ~14 units long → ~4 units on the sea
 const WATERLINE = 1.0;       // model-space height that sits at the water surface
 const BOW_TO_STERN = 6.0;    // model-space distance from centre to the stern (for the wake)
+const FUNNEL_TOP = new THREE.Vector3(-1.49, 6.0, 0); // model-space top of the funnel (for smoke)
 
 function toonGradient() {
   const tex = new THREE.DataTexture(new Uint8Array([85, 160, 215]), 3, 1, THREE.RedFormat);
@@ -70,6 +71,11 @@ export class Boat {
     model.scale.setScalar(MODEL_SCALE);
     model.position.y = -WATERLINE * MODEL_SCALE;
     this.body.add(model);
+    // marker at the top of the funnel, so smoke follows bobbing and rolling
+    this.funnel = new THREE.Object3D();
+    this.funnel.position.copy(FUNNEL_TOP).multiplyScalar(MODEL_SCALE);
+    this.funnel.position.y -= WATERLINE * MODEL_SCALE;
+    this.body.add(this.funnel);
     this.ready = true;
     return this;
   }
@@ -115,6 +121,13 @@ export class Boat {
       const side = (Math.random() - 0.5) * 0.6;
       this.ocean.addRipple(sx - Math.sin(this.heading) * side, sz - Math.cos(this.heading) * side, 0.3 + 0.3 * this.speed / this.maxSpeed);
     }
+  }
+
+  /** World position of the funnel top (for smoke), or null before the model loads. */
+  funnelWorld(out = new THREE.Vector3()) {
+    if (!this.funnel) return null;
+    this.group.updateMatrixWorld(true);
+    return this.funnel.getWorldPosition(out);
   }
 
   /** Warm window glow at night (0 … 1). */

@@ -20,6 +20,7 @@ npm run build      # production build in dist/
 - **Tugboat**: a cel-shaded, outlined tugboat bobs on the sea; its windows glow at night. Model: `public/models/tugboat.glb`.
   - **Tap the water** to sail there. A bobbing buoy with a flapping flag and pulsing rings marks the destination and disappears when the boat arrives.
   - **Wake**: a soft V of foam spreads back from the bow, with churned water behind the stern and a white splash at the bow, all growing with speed (glowing at night).
+  - **Funnel smoke**: cartoon puffs (cel-shaded, lumpy edges) pop out of the funnel, rise, blow back behind the boat, swell and fade. More, bigger puffs the faster it goes, an occasional lazy puff when idle; white by day, dim blue-grey at night.
   - **Follow mode** (target button, top right): the camera keeps the boat in view, looking a little ahead when it moves. It is on by default and whenever you send the boat somewhere; dragging the view turns it off; pinch-zoom keeps it on.
 - **Drops in the water**: tapping (or something dropping in on its own every few seconds) makes a realistic drop: a quick splash of droplets, then 2–3 small, faint concentric rings (about 2 units across at most) that barely bend the water and fade within about 2 seconds. White by day, glowing at night; at night the sea also glows by itself in patches.
 - **Ambient life**: lights drifting up off the water (dusk/night), petals on the wind (dawn/sunset), specks at night, cartoon wind lines.
@@ -46,6 +47,7 @@ src/
   core/TopDownControls.js tilted pan / zoom camera (pitch, default 60°)
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings
+  boat/Smoke.js      funnel smoke puffs (one batch)
   ui/controls.js     settings panel
 public/models/       tugboat.glb / .mtl, plus the original stylized-ocean.glb / .mtl exports
 ```

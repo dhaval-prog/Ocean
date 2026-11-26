@@ -8,6 +8,7 @@ import { AutoQuality } from './core/AutoQuality.js';
 import { TopDownControls } from './core/TopDownControls.js';
 import { Boat } from './boat/Boat.js';
 import { Marker } from './boat/Marker.js';
+import { Smoke } from './boat/Smoke.js';
 import { createControls } from './ui/controls.js';
 import './styles.css';
 
@@ -48,7 +49,9 @@ scene.add(ocean.mesh, particles.points, streaks.mesh);
 // the tugboat: tap the sea to sail it there
 const boat = new Boat(ocean);
 const marker = new Marker();
-scene.add(boat.group, marker.group);
+const smoke = new Smoke();
+scene.add(boat.group, marker.group, smoke.points);
+const funnelPos = new THREE.Vector3();
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera, { mobile: isTouch });
@@ -178,6 +181,7 @@ function applySize() {
   renderer.setSize(W, H, false);
   post.setSize(W, H, pixelRatio);
   streaks.setSize(W * pixelRatio, H * pixelRatio);
+  smoke.setScale(H * pixelRatio, camera.fov);
 }
 function resize() {
   W = app.clientWidth || 1; H = app.clientHeight || 1;
@@ -231,6 +235,8 @@ renderer.setAnimationLoop(() => {
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);
+  smoke.setLight(ocean.light);
+  smoke.update(dt, { funnel: boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.speed / boat.maxSpeed });
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
@@ -243,4 +249,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, particles, post, ambience, quality };
