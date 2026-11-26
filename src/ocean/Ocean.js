@@ -49,7 +49,7 @@ export class Ocean {
       uPalA: { value: TIMES[1].pal.map(hex) }, uPalB: { value: TIMES[1].pal.map(hex) },
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
       uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 }, uGlitter: { value: 0.3 },
-      uRipples: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -99, 0)) },
+      uRipples: { value: Array.from({ length: 12 }, () => new THREE.Vector4(0, 0, -99, 0)) },
       uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
     };
 
@@ -111,9 +111,9 @@ export class Ocean {
     U.uReef.value += ((this.reef ? 1 : 0) - U.uReef.value) * Math.min(1, dt * 3);
   }
 
-  /** Splash at (x, z): an expanding ring (foam by day, glow by night). */
+  /** Something drops in the water at (x, z): splash + spreading rings (foam by day, glow by night). */
   addRipple(x, z, strength = 1) {
-    const r = this.uniforms.uRipples.value[this._ripple++ % 8];
+    const r = this.uniforms.uRipples.value[this._ripple++ % 12];
     r.set(x, z, this.uniforms.uTime.value, strength);
   }
 
