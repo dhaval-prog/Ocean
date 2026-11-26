@@ -148,7 +148,7 @@ const quality = new AutoQuality({
 // --- loop -----------------------------------------------------------------------
 const timer = new THREE.Timer();
 timer.connect(document); // pauses cleanly while the tab is hidden
-let elapsed = 0, glowTimer = 0;
+let elapsed = 0, glowTimer = 0, dropTimer = 1;
 renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(0.1, timer.getDelta());
@@ -160,6 +160,13 @@ renderer.setAnimationLoop(() => {
     ui.setTimeOfDay(ocean.timeOfDay, ocean.timeName);
   }
   const L = ocean.look;
+
+  // now and then something drops into the sea somewhere in view
+  if ((dropTimer -= dt) <= 0) {
+    dropTimer = 1.2 + Math.random() * 2.3;
+    const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 12;
+    ocean.addRipple(controls.center.x + Math.cos(a) * r, controls.center.z + Math.sin(a) * r * 0.7, 0.5 + Math.random() * 0.5);
+  }
 
   // at night the sea glows by itself in random patches near the view
   if (L.night > 0.3 && (glowTimer -= dt) <= 0) {

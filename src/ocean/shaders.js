@@ -5,7 +5,7 @@ export const GLSL_COMMON = /* glsl */ `
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
 uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
 uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter;
-uniform vec4 uRipples[8]; uniform vec4 uObjects[4];
+uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
@@ -32,6 +32,28 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
     vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
     vec4 fx = mix(uFxA, uFxB, m);
+
+    // drop ripples: damped concentric waves spreading from where something hit
+    // the water. They also bend the water pattern, like real refraction.
+    vec2 rDisp = vec2(0.0); float rH = 0.0, rCrest = 0.0, rSplash = 0.0;
+    for (int i = 0; i < 12; i++) {
+      vec4 R = uRipples[i]; float age = t - R.z;
+      if (R.w <= 0.0 || age < 0.0 || age > 5.0) continue;
+      vec2 dv = p - R.xy; float r = length(dv);
+      float front = age*2.4, width = 0.6 + age*0.9;
+      float env = exp(-pow((r - front*0.75)/width, 2.0)) * exp(-age*0.55) * R.w / (1.0 + r*0.2);
+      float wave = sin((r - front)*7.5) * env * smoothstep(front + 0.25, front, r);  // nothing ahead of the front
+      rH += wave;
+      rDisp += (dv/max(r, 1e-3)) * wave * 0.22;
+      rCrest += smoothstep(0.55, 0.85, wave/max(env, 1e-3)) * min(env*1.6, 1.0);                 // thin bright crest lines
+      if (age < 0.6) {                                                              // splash on impact
+        float k = age/0.6, a = atan(dv.y, dv.x);
+        float drops = smoothstep(0.55, 0.9, cos(a*9.0 + R.x*3.0)) * smoothstep(0.14, 0.05, abs(r - (0.3 + k*1.4)));
+        float dimple = smoothstep(0.35*(1.0 - k) + 0.01, 0.0, r)*0.6;
+        rSplash += (drops + dimple) * (1.0 - k) * R.w;
+      }
+    }
+    p += rDisp;
 
     vec2 q = vec2(dot(p, uWind), dot(p, vec2(-uWind.y, uWind.x)));
     vec2 s = vec2(q.x*0.42, q.y*1.25) - vec2(fl*0.22, 0.0);
@@ -77,19 +99,13 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c += pal[5]*(trail*0.22 + lines*pulse*0.7)*fx.z;
 
 
-    // ripples (taps, boats) + foam rings around floating objects.
-    // Daytime: white foam. Night: bioluminescent glow.
+    // drop ripples: crests catch the light, troughs darken; foam by day, glow by night
+    c *= 1.0 + rH*0.28;
+    c = mix(c, pal[5], clamp(rCrest*0.85 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
+    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.9 + rSplash)*fx.z*1.3;
+
+    // foam rings around floating objects (boats, players)
     float rg = 0.0, rf = 0.0;
-    for (int i = 0; i < 8; i++) {
-      vec4 R = uRipples[i]; float age = t - R.z;
-      if (R.w <= 0.0 || age < 0.0 || age > 4.5) continue;
-      float r = length(p - R.xy), wob = 1.0;
-      // crisp cartoon rings: a bold outer ring plus a thinner one following it
-      float fade = smoothstep(4.5, 1.5, age);
-      float ring = (smoothstep(0.16, 0.1, abs(r - age*2.2)) + 0.6*smoothstep(0.09, 0.05, abs(r - age*1.5))) * fade;
-      float core = smoothstep(0.6, 0.5, r) * smoothstep(0.8, 0.0, age);
-      rg += (ring + core*0.9)*R.w*wob; rf += ring*R.w*wob;
-    }
     for (int i = 0; i < 4; i++) {
       vec4 O = uObjects[i]; if (O.w <= 0.0) continue;
       vec2 dv = p - O.xy; float r = length(dv), a = atan(dv.y, dv.x);
