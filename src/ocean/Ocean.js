@@ -15,7 +15,7 @@ const baseHeight = (x, z) => 0.08 * Math.sin(x * 0.9 + z * 0.35) + 0.05 * Math.s
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /**
- * A large stylized ocean surface that fades into the sky at its edges.
+ * A large cartoon ocean surface, viewed from above.
  *
  *   const ocean = new Ocean();
  *   scene.add(ocean.mesh);
@@ -32,6 +32,7 @@ export class Ocean {
     this.storm = 0.3;
     this.reef = false;
     this.foam = 0.35; // 0 … 1 (1 = original look)
+    this.glitter = 0.3; // cartoon twinkles, 0 … 1
     this.flow = 0;
 
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -44,11 +45,10 @@ export class Ocean {
     this.uniforms = {
       uTime: { value: 0 }, uFlow: { value: 0 },
       uWind: { value: new THREE.Vector2(1, 0.35).normalize() },
-      uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 12 },
+      uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 18 },
       uPalA: { value: TIMES[1].pal.map(hex) }, uPalB: { value: TIMES[1].pal.map(hex) },
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
-      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 },
-      uSun: { value: new THREE.Vector2(-3, -6.5) },
+      uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 }, uGlitter: { value: 0.3 },
       uRipples: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -99, 0)) },
       uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
     };
@@ -75,10 +75,8 @@ export class Ocean {
     this.skyTopColor = new THREE.Color();
     this.light = 1;
     this.timeName = 'Day';
-    this.look = { sunDir: new THREE.Vector3(), moon: 0, rays: 0, stars: 0, petals: 0, specks: 0, glints: 0, night: 0 };
+    this.look = { petals: 0, specks: 0, glints: 0, night: 0 };
     this._ripple = 0;
-    // Where the default camera sits; the water's sun reflection is placed for this view.
-    this.viewer = new THREE.Vector3(0, 7, 22);
     this._tmp = new THREE.Color();
     this.setTimeOfDay(1);
   }
@@ -95,14 +93,9 @@ export class Ocean {
     this.skyColor.set(TIMES[i].pal[9]).lerp(this._tmp.set(TIMES[j].pal[9]), e);
     this.skyTopColor.set(TIMES[i].pal[2]).lerp(this._tmp.set(TIMES[j].pal[2]), e).lerp(this.skyColor, 0.55);
     this.light = TIMES[i].light + (TIMES[j].light - TIMES[i].light) * e;
-    const L = this.look, A = TIMES[i].sky, B = TIMES[j].sky, lerp = (a, b) => a + (b - a) * e;
-    for (const key of ['moon', 'rays', 'stars', 'petals', 'specks', 'glints']) L[key] = lerp(A[key], B[key]);
+    const L = this.look, A = TIMES[i].ambient, B = TIMES[j].ambient, lerp = (a, b) => a + (b - a) * e;
+    for (const key of ['petals', 'specks', 'glints']) L[key] = lerp(A[key], B[key]);
     L.night = lerp(TIMES[i].fx[2], TIMES[j].fx[2]);
-    const el = lerp(A.el, B.el);
-    L.sunDir.set(-0.09 * Math.cos(el), Math.sin(el), -Math.cos(el)).normalize();
-    // Put the sun/moon reflection on the water where the default view would see it.
-    const h = this.viewer.y - this.base, dist = Math.min(50, Math.max(8, h / Math.tan(Math.max(el, 0.02))));
-    U.uSun.value.set(this.viewer.x - 0.09 * dist, this.viewer.z - dist);
     this.timeName = TIMES[Math.round(f) % n].name;
     this.timeOfDay = f;
   }
@@ -112,6 +105,7 @@ export class Ocean {
     U.uTime.value = elapsed;
     U.uStorm.value = this.storm;
     U.uFoam.value = this.foam;
+    U.uGlitter.value = this.glitter;
     this.flow += dt * (0.55 + 1.6 * this.storm);
     U.uFlow.value = this.flow;
     U.uReef.value += ((this.reef ? 1 : 0) - U.uReef.value) * Math.min(1, dt * 3);

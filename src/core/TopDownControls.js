@@ -1,0 +1,72 @@
+import * as THREE from 'three';
+
+/**
+ * Straight-down camera: drag to pan, pinch or scroll to zoom. No rotation.
+ * Panning glides to a stop, and the view stays inside `bound` so the edge of
+ * the ocean is never visible.
+ */
+export class TopDownControls {
+  constructor(camera, dom, { height = 32, minHeight = 14, maxHeight = 55, bound = 50, ground = 1.2 } = {}) {
+    Object.assign(this, { camera, dom, height, minHeight, maxHeight, bound, ground });
+    this.center = new THREE.Vector3(0, 0, 0);   // point on the sea under the camera
+    this.velocity = new THREE.Vector2();
+    this.dragging = false;
+    this.onStart = null; this.onEnd = null;
+    camera.up.set(0, 0, -1); // north is up on screen
+
+    const pts = new Map();
+    let last = null; // { x, y, dist } of the previous gesture frame
+    const gesture = () => {
+      const p = [...pts.values()];
+      const x = p.reduce((s, q) => s + q.x, 0) / p.length, y = p.reduce((s, q) => s + q.y, 0) / p.length;
+      const dist = p.length > 1 ? Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) : 0;
+      return { x, y, dist, n: p.length };
+    };
+
+    dom.addEventListener('pointerdown', e => {
+      dom.setPointerCapture?.(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      last = gesture();
+      if (!this.dragging) { this.dragging = true; this.velocity.set(0, 0); this.onStart?.(); }
+    });
+    dom.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const g = gesture();
+      if (last && g.n === last.n) {
+        const k = this.worldPerPixel();
+        const dx = -(g.x - last.x) * k, dz = -(g.y - last.y) * k;
+        this.center.x += dx; this.center.z += dz;
+        this.velocity.set(dx, dz).multiplyScalar(60); // units / second for the glide
+        if (g.n > 1 && last.dist > 0) this.zoomBy(last.dist / g.dist);
+      }
+      last = g;
+    });
+    const up = e => {
+      pts.delete(e.pointerId);
+      last = pts.size ? gesture() : null;
+      if (!pts.size && this.dragging) { this.dragging = false; this.onEnd?.(); }
+    };
+    dom.addEventListener('pointerup', up);
+    dom.addEventListener('pointercancel', up);
+    dom.addEventListener('wheel', e => { e.preventDefault(); this.zoomBy(Math.exp(e.deltaY * 0.0012)); this.onStart?.(); this.onEnd?.(); }, { passive: false });
+  }
+
+  worldPerPixel() {
+    const vh = 2 * this.height * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+    return vh / (this.dom.clientHeight || 1);
+  }
+
+  zoomBy(f) { this.height = THREE.MathUtils.clamp(this.height * f, this.minHeight, this.maxHeight); }
+
+  update(dt) {
+    if (!this.dragging && this.velocity.lengthSq() > 1e-4) {
+      this.center.x += this.velocity.x * dt; this.center.z += this.velocity.y * dt;
+      this.velocity.multiplyScalar(Math.exp(-dt * 4));
+    }
+    this.center.x = THREE.MathUtils.clamp(this.center.x, -this.bound, this.bound);
+    this.center.z = THREE.MathUtils.clamp(this.center.z, -this.bound, this.bound);
+    this.camera.position.set(this.center.x, this.ground + this.height, this.center.z);
+    this.camera.lookAt(this.center.x, this.ground, this.center.z);
+  }
+}

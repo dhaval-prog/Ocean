@@ -4,7 +4,7 @@ import { TIMES, CHIP_COLORS } from '../ocean/palettes.js';
  * Settings panel. A floating card on desktop and a bottom sheet on phones
  * (the layout switch lives in styles.css).
  */
-export function createControls(panel, { initial, onTimeOfDay, onAuto, onStorm, onFoam, onReef }) {
+export function createControls(panel, { initial, onTimeOfDay, onAuto, onStorm, onFoam, onGlitter, onReef }) {
   panel.innerHTML = `
     <button class="panel-toggle" type="button" aria-expanded="false" aria-controls="panel-body">
       <span class="panel-toggle-dot" aria-hidden="true"></span>
@@ -23,15 +23,17 @@ export function createControls(panel, { initial, onTimeOfDay, onAuto, onStorm, o
       <input type="range" min="0" max="1" step="0.01" data-storm aria-label="Sea state">
       <div class="row head"><span class="eyebrow">Foam</span><span class="hint">Less → More</span></div>
       <input type="range" min="0" max="1" step="0.01" data-foam aria-label="Foam amount">
+      <div class="row head"><span class="eyebrow">Glitter</span><span class="hint">Less → More</span></div>
+      <input type="range" min="0" max="1" step="0.01" data-glitter aria-label="Glitter amount">
       <label class="check"><input type="checkbox" data-reef> Reef shallows</label>
     </div>`;
 
   const $ = s => panel.querySelector(s);
   const toggle = $('.panel-toggle'), toggleLabel = $('.panel-toggle-label');
   const slider = $('[data-tod-slider]'), label = $('[data-tod-label]');
-  const auto = $('[data-auto]'), storm = $('[data-storm]'), foam = $('[data-foam]'), reef = $('[data-reef]');
+  const auto = $('[data-auto]'), storm = $('[data-storm]'), foam = $('[data-foam]'), glitter = $('[data-glitter]'), reef = $('[data-reef]');
 
-  slider.value = initial.tod; auto.checked = initial.auto; storm.value = initial.storm; foam.value = initial.foam; reef.checked = initial.reef;
+  slider.value = initial.tod; auto.checked = initial.auto; storm.value = initial.storm; foam.value = initial.foam; glitter.value = initial.glitter; reef.checked = initial.reef;
 
   const setOpen = open => { panel.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); };
   toggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
@@ -46,6 +48,7 @@ export function createControls(panel, { initial, onTimeOfDay, onAuto, onStorm, o
   auto.addEventListener('change', () => onAuto(auto.checked));
   storm.addEventListener('input', () => onStorm(+storm.value));
   foam.addEventListener('input', () => onFoam(+foam.value));
+  glitter.addEventListener('input', () => onGlitter(+glitter.value));
   reef.addEventListener('change', () => onReef(reef.checked));
 
   return {
