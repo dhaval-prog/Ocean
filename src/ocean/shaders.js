@@ -5,6 +5,8 @@ export const GLSL_COMMON = /* glsl */ `
 uniform vec3 uPalA[10]; uniform vec3 uPalB[10]; uniform vec4 uFxA; uniform vec4 uFxB; uniform float uMix;
 uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHalf; uniform float uFade; uniform float uFarScale;
 uniform float uStorm; uniform float uReef; uniform float uFoam; uniform vec2 uSun;
+uniform vec4 uRipples[8]; uniform vec4 uObjects[4];
+varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
   return mix(mix(oc_hash(i), oc_hash(i+vec2(1,0)), u.x), mix(oc_hash(i+vec2(0,1)), oc_hash(i+vec2(1,1)), u.x), u.y); }
@@ -17,8 +19,10 @@ export const GLSL_VERTEX = /* glsl */ `#include <begin_vertex>
   vec2 pp = position.xz; vLP = pp;
   float edge = smoothstep(uHalf, uHalf - 1.5, max(abs(pp.x), abs(pp.y)));
   float amp = edge * (0.5 + 2.2*uStorm);
-  transformed.y += amp * (0.05*sin(dot(pp, uWind)*1.4 - uFlow*1.6) + 0.03*sin(dot(pp, vec2(-uWind.y, uWind.x))*2.1 + uFlow*1.1)
-                        + 0.04*uStorm*sin(dot(pp, vec2(0.3, 1.0))*3.3 - uFlow*2.7));`;
+  float wsum = (0.05*sin(dot(pp, uWind)*1.4 - uFlow*1.6) + 0.03*sin(dot(pp, vec2(-uWind.y, uWind.x))*2.1 + uFlow*1.1)
+                        + 0.04*uStorm*sin(dot(pp, vec2(0.3, 1.0))*3.3 - uFlow*2.7));
+  vWave = wsum / (0.08 + 0.04*uStorm);   // roughly -1 (trough) … 1 (crest)
+  transformed.y += amp * wsum;`;
 
 export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
   {
@@ -76,12 +80,38 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, pal[5], lines*0.95);
     c += pal[5]*(trail*0.22 + lines*pulse*0.7)*fx.z;
 
+    // cel-shaded crest bands: hard-edged highlight on wave tops, broken up by noise
+    float crest = smoothstep(0.55, 0.6, vWave) * smoothstep(0.4, 0.62, oc_noise(p*0.3 + vec2(fl*0.08, 0.0)));
+    c = mix(c, mix(pal[4], pal[5], 0.45), crest*0.22);
+
+    // ripples (taps, boats) + foam rings around floating objects.
+    // Daytime: white foam. Night: bioluminescent glow.
+    float rg = 0.0, rf = 0.0;
+    for (int i = 0; i < 8; i++) {
+      vec4 R = uRipples[i]; float age = t - R.z;
+      if (R.w <= 0.0 || age < 0.0 || age > 4.5) continue;
+      float r = length(p - R.xy), wob = 0.6 + 0.4*oc_noise(p*2.5 + t);
+      float ring = exp(-pow((r - age*2.2)*2.6, 2.0)) * exp(-age*0.9);
+      float core = exp(-r*r*0.5) * exp(-age*1.3);
+      rg += (ring + core*0.9)*R.w*wob; rf += ring*R.w*wob;
+    }
+    for (int i = 0; i < 4; i++) {
+      vec4 O = uObjects[i]; if (O.w <= 0.0) continue;
+      vec2 dv = p - O.xy; float r = length(dv), a = atan(dv.y, dv.x);
+      float wob = 0.12*sin(a*5.0 + t*2.0) + 0.08*sin(a*3.0 - t*1.3);
+      float ring = smoothstep(0.28, 0.0, abs(r - O.z - 0.2 - wob)) * smoothstep(0.3, 0.6, oc_noise(vec2(a*3.0, t*0.8) + O.xy));
+      float wake = smoothstep(O.z*2.5, O.z, r) * 0.3;
+      rf += (ring + wake*0.5)*O.w; rg += (ring + wake)*O.w*0.6;
+    }
+    c = mix(c, pal[5], clamp(rf, 0.0, 1.0)*0.75*(1.0 - fx.z*0.5));
+    c += mix(pal[4], pal[5], 0.5)*rg*fx.z*1.5;
+
     // sun / moon disc + glitter path toward the viewer
     vec2 dp = p - uSun + (vec2(oc_noise(p*1.5 + t*0.6), oc_noise(p*1.5 - t*0.6 + 3.0)) - 0.5)*0.45;
     float dd = length(dp*vec2(1.0, 0.72));
     float halo = smoothstep(4.5, 0.4, dd);
     c += pal[7]*halo*halo*fx.w*0.3;
-    c = mix(c, pal[8], smoothstep(1.35, 1.1, dd)*fx.w*0.9);
+    c = mix(c, pal[8], smoothstep(1.35, 1.1, dd)*fx.w*0.5);
     float path = smoothstep(2.8, 0.0, abs(p.x - uSun.x)) * smoothstep(uSun.y - 0.5, uSun.y + 2.5, p.y);
     float gl = smoothstep(0.80, 0.97, oc_ridge(vec2(p.x*4.5, p.y*1.5 - t*0.9))) * path;
     c = mix(c, pal[7], gl*mix(0.35, 0.75, foam)*max(fx.w, 0.4));
@@ -104,7 +134,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
 
     // haze into the sky colour toward the horizon, then fade out at the edge
     float dist = max(abs(vLP.x), abs(vLP.y));
-    c = mix(c, pal[9], smoothstep(uHalf*0.35, uHalf - uFade*0.3, dist) * 0.85);
+    c = mix(c, mix(pal[9], pal[1], 0.22), smoothstep(uHalf*0.3, uHalf - uFade*0.3, dist) * 0.9);
 
     diffuseColor.rgb = c * 0.12;
     diffuseColor.a = smoothstep(uHalf, uHalf - uFade, dist);
