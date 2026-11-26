@@ -55,6 +55,21 @@ export class Ambience {
     const fb = ctx.createGain(); fb.gain.value = 0.38;
     this.music.connect(mlp); mlp.connect(this.master); mlp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(this.master);
 
+    // boat engine: a low diesel chug whose rate and loudness follow the throttle
+    this.engine = ctx.createGain(); this.engine.gain.value = 0;
+    const elp = ctx.createBiquadFilter(); elp.type = 'lowpass'; elp.frequency.value = 320;
+    this.engine.connect(elp); elp.connect(this.master);
+    this.engineOsc = [ctx.createOscillator(), ctx.createOscillator()];
+    this.engineOsc[0].type = 'sawtooth'; this.engineOsc[0].frequency.value = 46;
+    this.engineOsc[1].type = 'square'; this.engineOsc[1].frequency.value = 92.5;
+    const chugAmp = ctx.createGain(); chugAmp.gain.value = 0.5;
+    this.chug = ctx.createOscillator(); this.chug.type = 'sine'; this.chug.frequency.value = 4;
+    const chugDepth = ctx.createGain(); chugDepth.gain.value = 0.45;
+    this.chug.connect(chugDepth); chugDepth.connect(chugAmp.gain);
+    for (const o of this.engineOsc) { const g = ctx.createGain(); g.gain.value = 0.5; o.connect(g); g.connect(chugAmp); o.start(); }
+    chugAmp.connect(this.engine); this.chug.start();
+    this.setEngine(this._engineLevel ?? 0);
+
     this._chord = 0;
     const playChord = () => {
       const t = ctx.currentTime, notes = CHORDS[this._chord++ % CHORDS.length];
@@ -73,6 +88,33 @@ export class Ambience {
     };
     playChord();
     this._timers = [setInterval(playChord, 8000), setInterval(() => Math.random() < 0.55 && playBell(), 2300)];
+  }
+
+  /** Engine throttle 0 … 1 (idle putter at 0). */
+  setEngine(t01) {
+    this._engineLevel = t01;
+    if (!this.ctx || !this.engine) return;
+    const t = this.ctx.currentTime;
+    this.engine.gain.setTargetAtTime(0.05 + t01 * 0.13, t, 0.25);
+    this.chug.frequency.setTargetAtTime(3.5 + t01 * 7.5, t, 0.3);
+    this.engineOsc[0].frequency.setTargetAtTime(46 + t01 * 22, t, 0.3);
+    this.engineOsc[1].frequency.setTargetAtTime(92.5 + t01 * 44, t, 0.3);
+  }
+
+  /** Tugboat horn: two-note "toot". */
+  horn() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain(); out.gain.value = 0;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    out.connect(lp); lp.connect(this.master);
+    out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.22, t + 0.06);
+    out.gain.setValueAtTime(0.22, t + 0.9); out.gain.linearRampToValueAtTime(0, t + 1.25);
+    for (const [f, det] of [[174.6, -6], [220, 5], [349.2, 0]]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      const g = ctx.createGain(); g.gain.value = f > 300 ? 0.25 : 0.5;
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 1.3);
+    }
   }
 
   setMuted(m) {

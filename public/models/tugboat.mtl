@@ -1,0 +1,49 @@
+# Exported by three-d-stage
+newmtl deck_red
+Kd 0.6445 0.1301 0.0685
+Ks 0.2000 0.2000 0.2000
+Ns 40
+d 1.0000
+
+newmtl white
+Kd 0.8963 0.8632 0.7913
+Ks 0.2000 0.2000 0.2000
+Ns 100
+d 1.0000
+
+newmtl navy_paint
+Kd 0.0137 0.0467 0.1779
+Ks 0.2000 0.2000 0.2000
+Ns 110
+d 1.0000
+
+newmtl rubber
+Kd 0.0116 0.0116 0.0160
+Ks 0.2000 0.2000 0.2000
+Ns 10
+d 1.0000
+
+newmtl manila_rope
+Kd 0.5200 0.3800 0.1900
+Ks 0.2000 0.2000 0.2000
+Ns 20
+d 1.0000
+
+newmtl cream_paint
+Kd 0.8228 0.6724 0.4342
+Ks 0.2000 0.2000 0.2000
+Ns 90
+d 1.0000
+
+newmtl window_glass
+Kd 0.0080 0.0152 0.0467
+Ks 0.2000 0.2000 0.2000
+Ns 184
+d 1.0000
+
+newmtl flag_red
+Kd 0.7835 0.0561 0.0252
+Ks 0.2000 0.2000 0.2000
+Ns 80
+d 1.0000
+
