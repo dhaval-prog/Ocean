@@ -45,7 +45,7 @@ export class Ocean {
     this.uniforms = {
       uTime: { value: 0 }, uFlow: { value: 0 },
       uWind: { value: new THREE.Vector2(1, 0.35).normalize() },
-      uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 18 },
+      uHalf: { value: size / 2 }, uFade: { value: fade }, uFarScale: { value: 18 }, uViewDir: { value: new THREE.Vector2(0, -1) },
       uPalA: { value: TIMES[1].pal.map(hex) }, uPalB: { value: TIMES[1].pal.map(hex) },
       uFxA: { value: new THREE.Vector4(...TIMES[1].fx) }, uFxB: { value: new THREE.Vector4(...TIMES[1].fx) },
       uMix: { value: 0 }, uStorm: { value: this.storm }, uReef: { value: 0 }, uFoam: { value: 0.35 }, uGlitter: { value: 0.3 },
