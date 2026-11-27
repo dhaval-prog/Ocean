@@ -6,11 +6,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // colour into a handful of meshes, cel-shaded with a dark outline to match the
 // cartoon sea. It bobs on the water and sails to wherever you tap.
 
-const MODEL_SCALE = 0.3;     // model is ~14 units long → ~4 units on the sea
+const MODEL_SCALE = 0.36;    // model is ~14 units long → ~5 units on the sea
+// chunky cartoon proportions: a little taller and much beamier than the model
+const BULK = new THREE.Vector3(1.0, 1.1, 1.3);   // x = length, y = height, z = beam
 const WATERLINE = 1.0;       // model-space height that sits at the water surface
 const BOW_TO_STERN = 6.0;    // model-space distance from centre to the stern (for the wake)
-const HULL_HALF_LENGTH = 1.7; // world units, bow / stern sample points for riding the waves
-const HULL_HALF_BEAM = 0.6;
+const HULL_HALF_LENGTH = 2.1; // world units, bow / stern sample points for riding the waves
+const HULL_HALF_BEAM = 0.85;
 const FUNNEL_TOP = new THREE.Vector3(-1.49, 6.0, 0); // model-space top of the funnel (for smoke)
 
 function toonGradient() {
@@ -74,13 +76,13 @@ export class Boat {
     };
     model.add(new THREE.Mesh(mergeGeometries(all), outlineMat));
 
-    model.scale.setScalar(MODEL_SCALE);
-    model.position.y = -WATERLINE * MODEL_SCALE;
+    model.scale.copy(BULK).multiplyScalar(MODEL_SCALE);
+    model.position.y = -WATERLINE * MODEL_SCALE * BULK.y;
     this.body.add(model);
     // marker at the top of the funnel, so smoke follows bobbing and rolling
     this.funnel = new THREE.Object3D();
-    this.funnel.position.copy(FUNNEL_TOP).multiplyScalar(MODEL_SCALE);
-    this.funnel.position.y -= WATERLINE * MODEL_SCALE;
+    this.funnel.position.copy(FUNNEL_TOP).multiply(BULK).multiplyScalar(MODEL_SCALE);
+    this.funnel.position.y -= WATERLINE * MODEL_SCALE * BULK.y;
     this.body.add(this.funnel);
     this.ready = true;
     return this;
@@ -135,23 +137,32 @@ export class Boat {
     // --- floating: ride the actual waves. Sample the water under the bow,
     // stern and both sides: the hull rises and falls with the surface, pitches
     // with the slope along its length and rolls with the slope across it.
-    // Smoothed a little so it feels like a heavy hull, not a cork.
+    // The motion is exaggerated (more heave, pitch and roll than the surface
+    // strictly gives) so the boat visibly rocks with every wave, more so in a
+    // storm, plus a small shudder from the engine and the chop.
     const O = this.ocean, ch = Math.cos(this.heading), sh = Math.sin(this.heading);
     const L = HULL_HALF_LENGTH, Bm = HULL_HALF_BEAM, px = this.position.x, pz = this.position.y;
     const hBow = O.getHeightAt(px + ch * L, pz - sh * L), hStern = O.getHeightAt(px - ch * L, pz + sh * L);
     const hPort = O.getHeightAt(px - sh * Bm, pz - ch * Bm), hStar = O.getHeightAt(px + sh * Bm, pz + ch * Bm);
     const hMid = O.getHeightAt(px, pz);
     const waveY = (hBow + hStern + hPort + hStar + 2 * hMid) / 6;
-    const wavePitch = Math.atan2(hBow - hStern, 2 * L) * 1.4;   // a touch exaggerated so it reads from above
-    const waveRoll = Math.atan2(hPort - hStar, 2 * Bm) * 1.4;
-    const k = this._floatInit ? Math.min(1, dt * 5) : 1;
+    const storm = O.storm, ex = 2.8 + storm * 0.6;                 // exaggeration: more in rough water
+    const C = THREE.MathUtils.clamp;
+    const wavePitch = C(Math.atan2(hBow - hStern, 2 * L) * ex, -0.22, 0.22);   // never tips over
+    const waveRoll = C(Math.atan2(hPort - hStar, 2 * Bm) * ex, -0.24, 0.24);
+    const heave = O.base + (waveY - O.base) * (1.5 + storm * 0.5);
+    const k = this._floatInit ? Math.min(1, dt * 6) : 1;
     this._floatInit = true;
-    this._fy += (waveY - this._fy) * k; this._fp += (wavePitch - this._fp) * k; this._fr += (waveRoll - this._fr) * k;
+    this._fy += (heave - this._fy) * k; this._fp += (wavePitch - this._fp) * k; this._fr += (waveRoll - this._fr) * k;
     const sp = Math.abs(this.speed) / this.maxSpeed;
-    this.group.position.set(px, this._fy + Math.sin(t * 1.6) * 0.02, pz);
+    // its own swell rocking on top (always a little, a lot in a storm)
+    const rockA = 0.07 + storm * 0.07, heaveA = 0.06 + storm * 0.1;
+    // shudder: engine vibration when running + chop slapping the hull in a storm
+    const shake = 0.006 * sp * Math.sin(t * 31) + storm * 0.012 * (Math.sin(t * 7.3) + Math.sin(t * 11.7 + 1.3)) * 0.5;
+    this.group.position.set(px, this._fy + Math.sin(t * 1.6) * heaveA + shake * 0.5, pz);
     this.group.rotation.y = this.heading;
-    this.body.rotation.x = this._fr + Math.sin(t * 1.1) * 0.025 + turn * 0.08 * sp;                       // roll
-    this.body.rotation.z = this._fp + Math.sin(t * 1.3 + 1.0) * 0.015 + 0.04 * (Math.max(0, this.speed) / this.maxSpeed); // pitch
+    this.body.rotation.x = this._fr + Math.sin(t * 1.1) * rockA + Math.sin(t * 2.3 + 0.7) * rockA * 0.35 + turn * 0.1 * sp + shake;  // roll
+    this.body.rotation.z = this._fp + Math.sin(t * 1.3 + 1.0) * rockA * 0.8 + 0.05 * (Math.max(0, this.speed) / this.maxSpeed) + shake * 0.7; // pitch
     // sinking / resurfacing (SinkSequence)
     this.group.position.y += this.sinkY;
     this.body.rotation.x += this.sinkRoll;
@@ -161,7 +172,7 @@ export class Boat {
     this.ocean.uniforms.uBoatShadow.value = this.group.visible ? THREE.MathUtils.clamp(1 + this.sinkY / 1.2, 0, 1) : 0;
 
     // --- wake: V of foam + bow splash drawn by the water shader, plus the odd bubble drop
-    this.ocean.setBoat(this.position.x, this.position.y, this.heading, Math.max(0, this.speed) / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
+    this.ocean.setBoat(this.position.x, this.position.y, this.heading, Math.max(0, this.speed) / this.maxSpeed, 6.4 * MODEL_SCALE * BULK.x, 2.4 * MODEL_SCALE * BULK.z);
     if (this.speed > 0.6 && (this._wake -= dt) <= 0) {
       this._wake = 0.45;
       const back = BOW_TO_STERN * MODEL_SCALE;

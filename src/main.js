@@ -409,7 +409,7 @@ renderer.setAnimationLoop(() => {
   smoke.update(dt, { funnel: boat.frozen ? null : boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01, wind: windVec });
   // sea spray off the bow in rough water
   const live = boat.ready && !boat.frozen && boat.group.visible;
-  if (live) bowPos.set(boat.position.x + Math.cos(boat.heading) * 1.8, 0, boat.position.y - Math.sin(boat.heading) * 1.8);
+  if (live) bowPos.set(boat.position.x + Math.cos(boat.heading) * 2.2, 0, boat.position.y - Math.sin(boat.heading) * 2.2);
   spray.setLight(ocean.light);
   spray.update(dt, { bow: live ? bowPos : null, heading: boat.heading, speed01: Math.max(0, boat.speed) / boat.maxSpeed, rough: ocean.storm, water: ocean.base });
   rain.update(elapsed, { center: controls.center, rain: W.rain, wind: W.wind, windDir: weather.windDir, pixelRatio, light: ocean.light });
