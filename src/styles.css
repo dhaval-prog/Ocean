@@ -709,3 +709,95 @@ body.writing .chats-btn { display: none; }
 .chats .c-toast { position: absolute; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 10px 16px; border-radius: 999px; background: rgba(27, 33, 19, 0.92); color: #fff;
   font: 600 14px/1 'Figtree', system-ui, sans-serif; white-space: nowrap; animation: unsend-in 0.2s ease-out; z-index: 5; }
 @media (prefers-reduced-motion: reduce) { .chats .c-page, .chats .c-ring.live, .chats .c-ring.live > *, .chats .c-qr-sweep, .chats .c-scan-frame i { animation: none !important; } }
+
+/* --- chats as a frosted glass sheet over the live ocean (list and threads) ----- */
+body.chats-open .icon-btn, body.chats-open .brand { visibility: hidden; }
+.chats.sheet-mode { background: transparent; color: #fff; --c-ink: #fff; --c-mute: rgba(255, 255, 255, 0.78); --c-line: rgba(255, 255, 255, 0.22); }
+.chats.sheet-mode .c-sky { position: absolute; inset: 0; }
+.chats .c-sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 66%; border-radius: 30px 30px 0 0; overflow: hidden;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08) 40%, rgba(8, 36, 66, 0.3));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 -10px 30px rgba(0, 25, 50, 0.18);
+  backdrop-filter: blur(18px) saturate(1.2);
+  transition: height 0.35s cubic-bezier(.2, .9, .3, 1), transform 0.3s cubic-bezier(.2, .9, .3, 1); }
+.chats .c-sheet.full { height: calc(100% - env(safe-area-inset-top, 0px) - 14px); }
+.chats .c-sheet.rise { animation: c-sheet-rise 0.42s cubic-bezier(.2, .9, .3, 1); }
+@keyframes c-sheet-rise { from { transform: translateY(70%); } }
+.chats .c-grab { position: absolute; left: 0; right: 0; top: 0; height: 22px; display: grid; place-items: center; cursor: grab; touch-action: none; z-index: 2; }
+.chats .c-grab i { width: 42px; height: 5px; border-radius: 9px; background: rgba(255, 255, 255, 0.8); }
+.chats .c-sheet .c-page { position: absolute; inset: 18px 0 0; padding: 0 0 env(safe-area-inset-bottom, 0px); }
+.chats.sheet-mode .c-scroll { padding: 0 18px 24px; }
+.chats.sheet-mode, .chats.sheet-mode .c-name, .chats.sheet-mode .c-top h1 { text-shadow: 0 1px 4px rgba(0, 30, 60, 0.35); }
+/* header */
+.chats.sheet-mode .c-top { padding: 6px 18px 4px; touch-action: none; }
+.chats.sheet-mode .c-logo { color: #fff; }
+.chats.sheet-mode .c-top h1 { font-size: 28px; }
+/* glass bubbles: avatars, the + button, "In the air" */
+.chats.sheet-mode .c-av { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85), 0 3px 8px rgba(0, 30, 60, 0.22); }
+.chats.sheet-mode .c-av::after { content: ''; position: absolute; left: 16%; top: 12%; width: 32%; height: 16%; border-radius: 50%; background: rgba(255, 255, 255, 0.8); transform: rotate(-35deg); pointer-events: none; }
+.chats.sheet-mode .c-me .c-av { width: 44px; height: 44px; border: 0; }
+.chats.sheet-mode .c-new { width: 46px; height: 46px; color: #fff; box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.85), 0 3px 10px rgba(0, 30, 60, 0.25);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06) 58%, rgba(215, 245, 255, 0.3) 80%, rgba(255, 255, 255, 0.85) 98%); }
+.chats.sheet-mode .c-eyebrow { margin: 14px 0 10px; color: rgba(255, 255, 255, 0.85); }
+.chats.sheet-mode .c-air { padding: 10px 2px 4px; }
+.chats.sheet-mode .c-air-item { animation: c-float 3.8s ease-in-out infinite; animation-delay: var(--d, 0s); }
+@keyframes c-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.chats.sheet-mode .c-ring, .chats.sheet-mode .c-ring.live { position: relative; border: 0; animation: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 60%, rgba(215, 245, 255, 0.3) 82%, rgba(255, 255, 255, 0.85) 98%);
+  box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.85), 0 4px 10px rgba(0, 30, 60, 0.2); }
+.chats.sheet-mode .c-ring.live > * { animation: none; }
+.chats.sheet-mode .c-ring::after { content: ''; position: absolute; left: 16%; top: 11%; width: 30%; height: 15%; border-radius: 50%; background: rgba(255, 255, 255, 0.85); transform: rotate(-35deg); }
+.chats.sheet-mode .c-ring .c-av { box-shadow: none; } .chats.sheet-mode .c-ring .c-av::after { display: none; }
+.chats.sheet-mode .c-groups { color: #fff; }
+.chats.sheet-mode .c-air-name, .chats.sheet-mode .c-air-name.muted { color: #fff; }
+.chats .c-up { position: absolute; right: 2px; top: 0; width: 7px; height: 7px; border-radius: 50%; border: 1.2px solid rgba(255, 255, 255, 0.9); opacity: 0;
+  animation: c-up 2.6s ease-out infinite; animation-delay: calc(var(--d, 0s) * -0.5); pointer-events: none; }
+.chats .c-up.b { right: 10px; width: 4px; height: 4px; animation-delay: calc(var(--d, 0s) * -0.5 + 1.3s); }
+@keyframes c-up { 0% { transform: translate(0, 0) scale(0.5); opacity: 0; } 15% { opacity: 0.95; } 100% { transform: translate(4px, -26px) scale(1); opacity: 0; } }
+/* rows: plain on the glass, thin dividers, rising into place */
+.chats.sheet-mode .c-list { gap: 0; margin-top: 10px; }
+.chats.sheet-mode .c-row { background: none; border-radius: 0; padding: 12px 2px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); box-shadow: none; gap: 13px; }
+.chats.sheet-mode .c-row .c-av { width: 48px; height: 48px; }
+.chats.sheet-mode .c-sheet.rise .c-row { animation: c-row-in 0.45s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(0.12s + var(--i, 0) * 0.05s); }
+@keyframes c-row-in { from { transform: translateY(18px); opacity: 0; } }
+.chats.sheet-mode .c-name { color: #fff; font-size: 17px; }
+.chats.sheet-mode .c-line { color: rgba(255, 255, 255, 0.82); font-size: 14px; } .chats.sheet-mode .c-line.new { color: #fff; }
+.chats .c-end { align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; padding: 3px 0; }
+.chats.sheet-mode .c-when { margin: 0; color: rgba(255, 255, 255, 0.8); }
+.chats .c-dot { min-width: 19px; height: 19px; padding: 0 5px; box-sizing: border-box; border-radius: 99px; background: #ff7a5c; color: #fff; font: 800 10.5px/19px system-ui, sans-serif; text-align: center; }
+.chats.sheet-mode .c-stack .c-av.sm { width: 34px; height: 34px; border: 0; }
+.chats.sheet-mode .c-row.pending { margin-top: 14px; border: 1.4px dashed rgba(255, 255, 255, 0.55); border-radius: 22px; padding: 12px; }
+.chats.sheet-mode .c-row.pending .c-line, .chats.sheet-mode .c-row.pending b { color: #fff; }
+.chats.sheet-mode .c-lock { background: rgba(255, 255, 255, 0.15); color: #fff; }
+/* thread on the glass */
+.chats.sheet-mode .c-thead { background: none; border-bottom: 1px solid rgba(255, 255, 255, 0.22); padding: 6px 16px 12px; }
+.chats.sheet-mode .c-round { background: rgba(255, 255, 255, 0.16); color: #fff; box-shadow: inset 0 0 0 1.3px rgba(255, 255, 255, 0.8); }
+.chats.sheet-mode .c-thead .c-line { color: rgba(255, 255, 255, 0.85); }
+.chats.sheet-mode .c-msg { position: relative; color: #fff; font-weight: 500; }
+.chats.sheet-mode .c-msg.them { background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.1) 70%); box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.75); }
+.chats.sheet-mode .c-msg.me { background: linear-gradient(135deg, rgba(40, 170, 225, 0.72), rgba(16, 92, 175, 0.78));
+  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.55), 0 4px 12px rgba(0, 40, 90, 0.2); }
+.chats.sheet-mode .c-msg:not(.is-letter)::before { content: ''; position: absolute; left: 12px; top: 6px; width: 18px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); transform: rotate(-8deg); }
+.chats.sheet-mode .c-msg.is-letter { align-self: flex-start; max-width: 74%; margin-bottom: 14px; border: 0; border-radius: 6px; background: #fffbea; color: #2b3a7a; box-shadow: 0 8px 18px rgba(0, 30, 60, 0.28); transform: rotate(-1.5deg); }
+.chats.sheet-mode .c-msg.is-letter.me { align-self: flex-end; transform: rotate(1.5deg); }
+.chats.sheet-mode .c-msg.is-letter::after { content: ''; position: absolute; left: 0; right: 0; bottom: -13px; height: 9px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 10'%3E%3Cpath d='M0 5 q10 -5 20 0 t20 0 t20 0 t20 0' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x; background-size: 80px 10px; }
+.chats.sheet-mode .c-msg.is-letter .c-letter-tag { color: #8a8f7c; }
+.chats.sheet-mode .c-from { color: rgba(255, 255, 255, 0.9); }
+.chats.sheet-mode .c-sys { color: rgba(255, 255, 255, 0.8); }
+.chats.sheet-mode .c-msgs > .c-msg:last-child { animation: c-msg-in 0.4s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes c-msg-in { from { transform: translateY(14px) scale(0.92); opacity: 0; } }
+.chats.sheet-mode .c-compose { position: relative; margin: 0 10px 10px; padding: 7px 7px 7px 10px; border: 0; border-radius: 30px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1)); box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.6); }
+.chats.sheet-mode .c-compose::before { content: ''; position: absolute; left: 22px; right: 22px; top: -7px; height: 8px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 8'%3E%3Cpath d='M0 4 q5 -4 10 0 t10 0 t10 0 t10 0' fill='none' stroke='white' stroke-opacity='.8' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x; background-size: 40px 8px; }
+.chats.sheet-mode .c-compose .c-input { background: transparent; color: #fff; padding: 11px 8px; }
+.chats.sheet-mode .c-compose .c-input::placeholder { color: rgba(255, 255, 255, 0.75); }
+.chats.sheet-mode .c-compose .c-pill.is-letter { background: rgba(255, 255, 255, 0.9); color: #12405e; }
+.chats.sheet-mode .c-send { color: #fff; box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.85);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 58%, rgba(215, 245, 255, 0.32) 80%, rgba(255, 255, 255, 0.85) 98%); }
+/* battery saver / reduced motion: the glass stays, the motion stops */
+body.saver-gfx .chats.sheet-mode .c-air-item, body.saver-gfx .chats .c-up { animation: none; }
+@media (prefers-reduced-motion: reduce) { .chats .c-sheet, .chats .c-sheet.rise, .chats.sheet-mode .c-air-item, .chats .c-up, .chats.sheet-mode .c-row, .chats.sheet-mode .c-msgs > .c-msg:last-child { animation: none !important; transition: none !important; } }
+
+.chats.sheet-mode .c-compose .c-input:focus { box-shadow: none; }
+.chats.sheet-mode .c-compose:focus-within { box-shadow: inset 0 0 0 1.6px rgba(255, 255, 255, 0.95); }
