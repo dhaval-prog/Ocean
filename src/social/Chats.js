@@ -83,6 +83,7 @@ export class Chats {
     for (const t of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart']) this.el.addEventListener(t, e => e.stopPropagation(), { passive: true });
     this.el.addEventListener('click', e => this._click(e));
     this._bindSheetDrag();
+    window.addEventListener('resize', () => { if (this.isOpen && this._bubs) this._layoutBubbles(); });
     this.el.addEventListener('keydown', e => { if (e.key === 'Escape') this.back(); });
     this.stack = [];
     this._badge();
@@ -101,6 +102,7 @@ export class Chats {
 
   /** Every frame from the app: tiny bubbles rise now and then; a new letter sends up a burst. */
   update(dt) {
+    if (this.isOpen) { if (this._bubs && !this.reduce && !this.saver && !this.sheetFull) { this._bubStep(Math.min(dt, 0.05)); this._bubPlace(); } return; }
     if (this.btn.hidden || this.reduce) return;
     if ((this._unreadAt -= dt) <= 0) {
       this._unreadAt = 0.5;
@@ -193,8 +195,12 @@ export class Chats {
       if (!d || e.pointerId !== d.id) return;
       const dy = e.clientY - d.y, sh = d.sh; d = null;
       sh.style.transition = ''; sh.style.transform = '';
-      if (dy > Math.min(160, sh.getBoundingClientRect().height * 0.3)) { if (sh.classList.contains('full') && this.stack.at(-1).page === 'list') { this.sheetFull = false; sh.classList.remove('full'); } else this.close(); }
-      else if (dy < -50) { this.sheetFull = true; sh.classList.add('full'); }
+      const list = this.stack.at(-1).page === 'list';
+      if (Math.abs(dy) < 6 && list) {                                  // a tap on the title bar: open / lower the list
+        this.sheetFull = !sh.classList.contains('full'); sh.classList.toggle('full', this.sheetFull); sh.classList.toggle('lowered', !this.sheetFull);
+      } else if (dy > 60) {                                            // down: back to peeking at the sea (a thread goes back)
+        if (list) { this.sheetFull = false; sh.classList.remove('full'); sh.classList.add('lowered'); } else this.back();
+      } else if (dy < -40 && list) { this.sheetFull = true; sh.classList.add('full'); sh.classList.remove('lowered'); }   // up: the full list
     };
     window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', up, true);
   }
@@ -260,39 +266,51 @@ export class Chats {
   /** forward: true slides in from the right, false from the left, null redraws in place. */
   _render(forward) {
     const { page, arg } = this.stack.at(-1);
-    const html = { list: () => this._list(), group: () => this._group(), add: () => this._add(), thread: () => this._thread(arg), scan: () => this._scan() }[page]();
+    let html = { list: () => this._list(), group: () => this._group(), add: () => this._add(), thread: () => this._thread(arg), scan: () => this._scan() }[page]();
     const anim = forward == null ? '' : forward ? 'in-fwd' : 'in-back';
     // the list and the threads sit in a frosted glass sheet over the live ocean (tap the sea above it,
     // or drag the handle down, to close; drag it up for the full height); the rest are full pages
     const sheet = page === 'list' || page === 'thread';
     this.el.className = 'chats page-' + page + (sheet ? ' sheet-mode' : '');
+    let sea = '';
+    if (page === 'list') { const k = html.indexOf('<div class="c-panel-top'); sea = html.slice(0, k); html = html.slice(k); }
     this.el.innerHTML = sheet
-      ? `<div class="c-sky" data-act="dismiss" aria-hidden="true"></div>
-         <div class="c-sheet${page === 'thread' || this.sheetFull ? ' full' : ''}${forward === true && this.stack.length === 1 ? ' rise' : ''}">
+      ? `${sea || '<div class="c-sky" data-act="dismiss" aria-hidden="true"></div>'}
+         <div class="c-sheet${page === 'thread' || this.sheetFull ? ' full' : page === 'list' ? ' lowered' : ''}${forward === true && this.stack.length === 1 ? ' rise' : ''}">
            <div class="c-grab" aria-hidden="true"><i></i></div><div class="c-page ${anim}">${html}</div></div>`
       : `<div class="c-page ${anim}">${html}</div>`;
     if (page === 'add') this._drawQR();
+    if (page === 'list') requestAnimationFrame(() => this._layoutBubbles()); else this._bubs = null;
     if (page === 'scan') this._startScan();
     if (page === 'thread') { const m = this.el.querySelector('.c-msgs'); if (m) m.scrollTop = m.scrollHeight; }
   }
 
+  /** The bubbles screen: every chat a glass bubble drifting on the sea (bigger = more waiting). */
   _list() {
-    const air = this.friends.filter(f => f.unread);
-    const req = this.data.requests;
+    const req = this.data.requests, chats = this._chats();
+    const bub = c => {
+      const n = c.unread || 0, r = Math.round(Math.min(66, c.kind === 'group' ? 38 : 30 + 9 * Math.sqrt(n)));
+      const inner = c.kind === 'group' ? `<span class="c-bgroup">${IC.group}</span>` : avatar(c.who[0]);
+      const w = `--wd:${(5 + Math.random() * 3).toFixed(2)}s;--wx:${(Math.random() * 10 - 5).toFixed(1)}px;--wy:${(4 + Math.random() * 4).toFixed(1)}px;--wdl:${(-Math.random() * 6).toFixed(2)}s`;
+      return `<button type="button" class="c-bub${n ? ' waiting' : ''}" data-chat="${c.id}" data-r="${r}" style="--r:${r}px;${w}" aria-label="${esc(c.name)}${n ? `, ${n} waiting` : ''}">
+        <span class="c-wander"><span class="c-bglass">${inner}</span>${n ? `<span class="c-dot">${n > 99 ? '99+' : n}</span>` : ''}
+        <span class="c-blabel">${esc(c.name)}<small>${ago(c.at)}</small></span></span></button>`;
+    };
     return `
-      <header class="c-top">
-        <span class="c-logo">${IC.plane}</span><h1>Chats</h1>
-        <span class="c-me">${avatar(ME)}</span>
-        <button type="button" class="c-new" data-act="add" aria-label="Add a friend">${IC.newChat}</button>
-      </header>
-      <div class="c-scroll">
-        <p class="c-eyebrow">In the air</p>
-        <div class="c-air">
-          <button type="button" class="c-air-item" data-act="group"><span class="c-ring">${`<span class="c-av c-groups">${IC.group}</span>`}</span><span class="c-air-name muted">Groups</span></button>
-          ${air.map((f, i) => `<button type="button" class="c-air-item" data-chat="${f.id}" style="--d:${(-(i + 1) * 0.9).toFixed(1)}s"><span class="c-ring live">${avatar(f)}<i class="c-up"></i><i class="c-up b"></i></span><span class="c-air-name">${esc(f.name)}</span></button>`).join('')}
+      <div class="c-sea">
+        <button type="button" class="c-round c-close" data-act="dismiss" aria-label="Close chats">${IC.close}</button>
+        <div class="c-btitle"><b>Chats</b><small>Bigger bubbles have more waiting</small></div>
+        <div class="c-bfield">${chats.map(bub).join('')}</div>
+        <div class="c-pills">
+          <button type="button" class="c-gpill" data-act="group"><span class="c-mini">${IC.group}</span>New group</button>
+          <button type="button" class="c-gpill" data-act="add"><span class="c-mini">${IC.newChat}</span>Add friend</button>
         </div>
+      </div>
+      <div class="c-panel-top c-top"><h1>All chats</h1><span class="c-count">${chats.length}</span>
+        <button type="button" class="c-new" data-act="add" aria-label="Add a friend">${IC.newChat}</button></div>
+      <div class="c-scroll">
         <div class="c-list">
-          ${this._chats().map((c, i) => `
+          ${chats.map((c, i) => `
             <button type="button" class="c-row" data-chat="${c.id}" style="--i:${i}">
               ${c.kind === 'group' ? `<span class="c-stack">${c.who.slice(0, 2).map(p => avatar(p, 'sm')).join('')}</span>` : avatar(c.who[0])}
               <span class="c-mid"><span class="c-name">${esc(c.name)}</span><span class="c-line${c.unread ? ' new' : ''}">${esc(c.line)}</span></span>
@@ -303,6 +321,56 @@ export class Chats {
               <span class="c-mid"><span class="c-line"><b>${esc(r.name)}</b> — chat opens when they accept your request.</span></span></div>`).join('')}
         </div>
       </div>`;
+  }
+
+  // --- the bubbles drift slowly, nudging each other, inside the sea above the panel -----------
+  _layoutBubbles() {
+    const field = this.el.querySelector('.c-bfield'); if (!field) { this._bubs = null; return; }
+    const W = field.clientWidth, H = field.clientHeight;
+    const els = [...field.querySelectorAll('.c-bub')];
+    // biggest first, spread out on a loose spiral, then relaxed so none overlap
+    const items = els.map(el => ({ el, r: +el.dataset.r })).sort((a, b) => b.r - a.r);
+    items.forEach((b, k) => {
+      const a = k * 2.4, d = 26 * Math.sqrt(k) + (k ? 30 : 0);
+      b.x = W / 2 + Math.cos(a) * d * 1.25; b.y = H * 0.46 + Math.sin(a) * d;
+      const sp = 5 + Math.random() * 5, th = Math.random() * Math.PI * 2;
+      b.vx = Math.cos(th) * sp; b.vy = Math.sin(th) * sp; b.ph = Math.random() * 10;
+    });
+    this._bubs = { items, W, H };
+    for (let k = 0; k < 120; k++) this._bubStep(0, true);
+    this._bubPlace();
+  }
+
+  _bubStep(dt, relax = false) {
+    const B = this._bubs; if (!B) return;
+    const { items, W, H } = B, pad = 6, labelH = 30;
+    for (const b of items) {
+      if (!relax) {
+        b.ph += dt;
+        b.vx += Math.sin(b.ph * 0.7) * 2.4 * dt; b.vy += Math.cos(b.ph * 0.53) * 2.4 * dt;   // a slow wandering current
+        const sp = Math.hypot(b.vx, b.vy), max = 11;
+        if (sp > max) { b.vx *= max / sp; b.vy *= max / sp; }
+        b.x += b.vx * dt; b.y += b.vy * dt;
+      }
+      // soft walls (leave room for the name under each bubble)
+      if (b.x < b.r + pad) { b.x = b.r + pad; b.vx = Math.abs(b.vx); }
+      if (b.x > W - b.r - pad) { b.x = W - b.r - pad; b.vx = -Math.abs(b.vx); }
+      if (b.y < b.r + pad) { b.y = b.r + pad; b.vy = Math.abs(b.vy); }
+      if (b.y > H - b.r - labelH) { b.y = H - b.r - labelH; b.vy = -Math.abs(b.vy); }
+    }
+    // they nudge each other apart, gently swapping a little of their drift
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      const a = items[i], b = items[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.01, min = a.r + b.r + 22;
+      if (d < min) {
+        const push = (min - d) / 2, nx = dx / d, ny = dy / d;
+        a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+        if (!relax) { const k = 0.5; a.vx -= nx * k * 6; a.vy -= ny * k * 6; b.vx += nx * k * 6; b.vy += ny * k * 6; }
+      }
+    }
+  }
+
+  _bubPlace() {
+    for (const b of this._bubs?.items || []) b.el.style.transform = `translate(${(b.x - b.r).toFixed(1)}px, ${(b.y - b.r).toFixed(1)}px)`;
   }
 
   _group() {
