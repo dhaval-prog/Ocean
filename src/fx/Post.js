@@ -13,6 +13,8 @@ const GradeShader = {
     tDiffuse: { value: null },
     uSat: { value: 1.2 },
     uInk: { value: 0.6 },
+    tMask: { value: null },
+    uMasked: { value: 0 },
     uTexel: { value: new THREE.Vector2(0.001, 0.001) },
     uWarm: { value: new THREE.Vector3(0.05, 0.02, -0.035) },
     uCool: { value: new THREE.Vector3(-0.025, 0.008, 0.03) },   // cool shadows, without pushing blues toward violet
@@ -21,7 +23,7 @@ const GradeShader = {
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uSat; uniform vec3 uWarm; uniform vec3 uCool; uniform float uVig; uniform float uAspect; uniform float uInk; uniform vec2 uTexel;
+    uniform sampler2D tDiffuse; uniform float uSat; uniform vec3 uWarm; uniform vec3 uCool; uniform float uVig; uniform float uAspect; uniform float uInk; uniform vec2 uTexel; uniform sampler2D tMask; uniform float uMasked;
     varying vec2 vUv;
     float L(vec2 o) { return dot(texture2D(tDiffuse, vUv + o*uTexel).rgb, vec3(0.299, 0.587, 0.114)); }
     void main() {
@@ -36,7 +38,9 @@ const GradeShader = {
       // ink only on the darker side of an edge, so white foam keeps a clean
       // outline drawn in the water around it instead of a grey halo inside it
       float avg = (t + b + l0 + r0) * 0.25, self = dot(c, vec3(0.299, 0.587, 0.114));
-      c = mix(c, c*0.55, edge * step(self, avg + 0.01) * uInk);
+      // no ink on (or right round) the letter paper: its diagonal fold edges would ink as a sawtooth
+      float paper = uMasked > 0.5 ? smoothstep(0.02, 0.2, texture2D(tMask, vUv).r) : 0.0;
+      c = mix(c, c*0.55, edge * step(self, avg + 0.01) * uInk * (1.0 - paper));
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, uSat);
       c += uWarm*smoothstep(0.45, 1.0, l) + uCool*(1.0 - smoothstep(0.0, 0.5, l));
@@ -45,6 +49,8 @@ const GradeShader = {
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
 };
+
+const MASK_LAYER = 7;
 
 export class Post {
   constructor(renderer, scene, camera) {
@@ -59,11 +65,20 @@ export class Post {
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
+    // a low-res mask of the letter paper (linear filtering spreads it a little past the paper's edge)
+    this.renderer = renderer; this.scene = scene; this.camera = camera;
+    this.maskRT = new THREE.WebGLRenderTarget(2, 2);
+    this.maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    this.grade.uniforms.tMask.value = this.maskRT.texture;
   }
+
+  /** Objects kept free of the ink outlines (the letter paper). */
+  setUninked(obj) { this.uninked = obj; obj.layers.enable(MASK_LAYER); }
 
   setSize(w, h, pixelRatio) {
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(w, h);
+    this.maskRT.setSize(Math.max(2, Math.round(w * pixelRatio / 3)), Math.max(2, Math.round(h * pixelRatio / 3)));
     this.grade.uniforms.uAspect.value = w / h;
     this.grade.uniforms.uTexel.value.set(1.1 / w, 1.1 / h); // ~1 CSS pixel lines on any screen
   }
@@ -74,5 +89,17 @@ export class Post {
     this.grade.uniforms.uSat.value = 1.2 - storm * 0.15;
   }
 
-  render(dt) { this.composer.render(dt); }
+  render(dt) {
+    const o = this.uninked, on = !!(o && o.visible && o.parent);
+    this.grade.uniforms.uMasked.value = on ? 1 : 0;
+    if (on) {
+      const r = this.renderer, sc = this.scene, cam = this.camera, bg = sc.background, ov = sc.overrideMaterial, fog = sc.fog;
+      const mask = cam.layers.mask, cc = r.getClearColor(new THREE.Color()), ca = r.getClearAlpha();
+      cam.layers.set(MASK_LAYER); sc.background = null; sc.overrideMaterial = this.maskMat; sc.fog = null;
+      r.setRenderTarget(this.maskRT); r.setClearColor(0x000000, 1); r.clear(); r.render(sc, cam);
+      r.setRenderTarget(null); r.setClearColor(cc, ca);
+      cam.layers.mask = mask; sc.background = bg; sc.overrideMaterial = ov; sc.fog = fog;
+    }
+    this.composer.render(dt);
+  }
 }

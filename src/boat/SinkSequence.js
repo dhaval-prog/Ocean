@@ -271,10 +271,24 @@ export class SinkSequence {
   _shade(on) {
     const c = this.geo.attributes.color;
     if (!on) { if (this._shaded) { c.array.fill(1); c.needsUpdate = true; this._shaded = false; } return; }
-    this.geo.computeVertexNormals();
-    const nr = this.geo.attributes.normal, lx = 0.25, ly = 0.18, lz = 0.95;   // mostly from the front: the keel and side panels read darker
+    // vertex normals, each face added with its sign matched to what the vertex has so far: a folded-over
+    // flap faces the other way, and plain averaging would cancel out along the crease (a sawtooth of shade)
+    const pos = this.geo.attributes.position.array, idx = this.geo.index.array;
+    const acc = this._nacc || (this._nacc = new Float32Array(pos.length)); acc.fill(0);
+    for (let f = 0; f < idx.length; f += 3) {
+      const a = idx[f] * 3, b = idx[f + 1] * 3, d = idx[f + 2] * 3;
+      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+      const vx = pos[d] - pos[a], vy = pos[d + 1] - pos[a + 1], vz = pos[d + 2] - pos[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      for (const o of [a, b, d]) {
+        const sg = acc[o] * nx + acc[o + 1] * ny + acc[o + 2] * nz < 0 ? -1 : 1;
+        acc[o] += sg * nx; acc[o + 1] += sg * ny; acc[o + 2] += sg * nz;
+      }
+    }
+    const lx = 0.25, ly = 0.18, lz = 0.95;                                              // mostly from the front: the keel and side panels read darker
     for (let i = 0; i < c.count; i++) {
-      const v = Math.min(1, 0.36 + 0.68 * Math.abs(nr.getX(i) * lx + nr.getY(i) * ly + nr.getZ(i) * lz));
+      const o = i * 3, l = Math.hypot(acc[o], acc[o + 1], acc[o + 2]) || 1;
+      const v = Math.min(1, 0.36 + 0.68 * Math.abs((acc[o] * lx + acc[o + 1] * ly + acc[o + 2] * lz) / l));
       const ln = this._crease?.[i] ? 0.74 : 1;                                          // a faint line along every fold
       c.setXYZ(i, v * ln, v * ln, v * ln * 1.01);
     }
@@ -307,10 +321,9 @@ export class SinkSequence {
       [0, hh, -r2, -r2, -1], [0, hh, r2, -r2, 1],                         // 2, 3: top corners to the centre
       [0, hh, -s22, -c22, -1], [0, hh, s22, -c22, 1],                     // 4, 5: slanted edges to the centre
     ];
-    const cz = this._crease || (this._crease = new Uint8Array(a.count)); cz.fill(0);   // vertices on a fold line or a flap edge
+    const cz = this._crease || (this._crease = new Uint8Array(a.count)); cz.fill(0);   // vertices on a fold line
     for (let n = 0; n < a.count; n++) {
       let qx = b[n * 3], qy = b[n * 3 + 1], qz = 0, out = null;
-      if (k > 0 && (Math.abs(Math.abs(qx) - hw) < 1e-4 || Math.abs(qy - hh) < 1e-4)) cz[n] = 1;   // the paper's edges: a flap's edge shows as a line
       // 1: fold the right half over to the left and open it again
       const p1 = st(0);
       if (p1 > 0 && Math.abs(qx) < snap) { qx = 0; cz[n] = 1; }          // onto the centre crease
@@ -505,7 +518,7 @@ export class SinkSequence {
       }
       P.position.addScaledVector(new V3(1, 0, 0).applyQuaternion(tg.q), gx);
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 + gFl, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv + gYaw : 0)));   // a plane dips its nose away from you
-      if (sv > 0) P.quaternion.multiply(planeQ(sv, -(0.55 * this._bank + gRoll)));   // nose away, turned over, banking about its nose
+      if (sv > 0) P.quaternion.multiply(planeQ(sv, 0.55 * this._bank + gRoll));   // nose away, turned over, banking about its nose (steer right: left wing up)
       const Bt = this.bottle;
       P.scale.setScalar(1 - (1 - PLANE_SCALE) * Math.max(0, sv));                       // the folded plane sits comfortably on screen
       if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
