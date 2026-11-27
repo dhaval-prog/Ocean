@@ -549,7 +549,8 @@ function setGraphics(hq) {
   quality.max = hq ? maxDpr : Math.min(maxDpr, SAVER_DPR);        // battery saver: a fixed, lower 3D resolution
   quality.enabled = hq && params.get('quality') !== 'fixed';
   quality.capped = false; quality.set(quality.max);
-  letter.ringInterval = hq ? 0 : 0.1;                             // friends' water rings at ~10 fps in battery saver
+  letter.ringInterval = hq ? 0 : 0.1;
+  chats?.setSaver(!hq);                                            // the chat bubble keeps only its drift                             // friends' water rings at ~10 fps in battery saver
   needFrame = true;
 }
 setGraphics(hqGraphics);
