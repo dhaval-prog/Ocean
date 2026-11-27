@@ -12,6 +12,8 @@ import { Marker } from './boat/Marker.js';
 import { Smoke } from './boat/Smoke.js';
 import { SinkSequence } from './boat/SinkSequence.js';
 import { Letter } from './social/Letter.js';
+import { Chats } from './social/Chats.js';
+import { FRIENDS } from './social/people.js';
 import { createControls } from './ui/controls.js';
 import { Weather, PRESETS } from './weather/Weather.js';
 import { Rain } from './weather/Rain.js';
@@ -86,6 +88,7 @@ const funnelPos = new THREE.Vector3();
 
 // click the boat: it sinks, a paper flies up and onto the screen; flick it back to get the boat back
 const seqHint = document.getElementById('seq-hint');
+let chats = null;   // the chats screen (created below)
 const seq = new SinkSequence({
   scene, camera, dom: renderer.domElement, boat, ocean,
   getWind: () => ({ dir: weather.windDir, strength: weather.cur.wind }),   // the paper drifts with the wind
@@ -94,10 +97,21 @@ const seq = new SinkSequence({
     controls.enabled = mode === 'idle';                // the camera holds still during the sequence
     if (mode !== 'idle') marker.hide();
     letter?.onMode(mode);                              // writing overlay, people row, guide text
+    if (chats) chats.btn.hidden = mode !== 'idle' || chats.isOpen;   // the chat button only on the calm ocean
   },
 });
 // the letter on the paper + who it's for (people row at the top)
 const letter = new Letter({ root: app, seq, hint: seqHint });
+// chats (round button, bottom right): people, groups, add a friend; "Letter" writes to them on the ocean
+chats = new Chats({
+  root: app, friends: FRIENDS,
+  onWrite: id => {
+    const i = letter.recipients.findIndex(p => p.id === id);
+    if (i >= 0) letter.select(i);
+    if (seq.mode === 'idle') seq.start();
+  },
+});
+if (params.get('invite')) chats.receiveInvite(params.get('invite'));   // opened from a friend's invite link
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera);
