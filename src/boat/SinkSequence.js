@@ -260,10 +260,13 @@ export class SinkSequence {
    *   7, 8 fold each wing down, level
    * Folds 1-5 are flat folds: the flap swings over toward you about its crease
    * and lies on top. Each vertex is folded in order, so later folds carry the
-   * earlier flaps along.
+   * earlier flaps along. Once a fold starts, the points right next to its
+   * crease snap onto the crease line, so every fold edge is perfectly straight
+   * (instead of following the grid in steps). The wings spread wide as they fold.
    */
   _foldPlane(k) {
     const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.13;
+    const snap = 0.75 * Math.hypot(PW / 72, PH / 90);                    // ≥ half the longest triangle edge
     const st = i => Math.min(1, Math.max(0, k * 8 - i));                 // progress of fold i (0-based)
     const e = i => { const x = st(i); return x * x * (3 - 2 * x); };
     const s22 = Math.sin(Math.PI / 8), c22 = Math.cos(Math.PI / 8), r2 = Math.SQRT1_2;
@@ -277,12 +280,14 @@ export class SinkSequence {
       let qx = b[n * 3], qy = b[n * 3 + 1], qz = 0, out = null;
       // 1: fold the right half over to the left and open it again
       const p1 = st(0);
+      if (p1 > 0 && Math.abs(qx) < snap) qx = 0;                         // onto the centre crease
       if (p1 > 0 && p1 < 1 && qx > 0) { const th = Math.PI * 0.94 * Math.sin(Math.PI * p1); out = [qx * Math.cos(th), qy, qx * Math.sin(th)]; }
       // 2-5: flat folds, each flap swinging over toward you onto the paper
       for (let i = 1; i <= 4 && !out; i++) {
         const p = st(i); if (p <= 0) break;
         const [ax, ay, dx, dy, sgn] = flats[i];
-        const vx = qx - ax, vy = qy - ay, cr = dx * vy - dy * vx;
+        let vx = qx - ax, vy = qy - ay, cr = dx * vy - dy * vx;
+        if (Math.abs(cr) < snap) { qx -= -dy * cr; qy -= dx * cr; continue; }   // onto the crease: a straight fold edge
         if (cr * sgn <= 0) continue;                                      // not on the moving side
         const pr = vx * dx + vy * dy, px = vx - pr * dx, py = vy - pr * dy, pl = Math.hypot(px, py) || 1e-6;
         if (p < 1) {                                                      // part-way: lifting about the crease
@@ -292,14 +297,16 @@ export class SinkSequence {
       }
       // 6-8: fold in half (halves swing back), then each wing down
       if (!out && st(5) > 0) {
-        const phi = e(5) * Math.PI / 2, side = qx >= 0 ? 1 : -1, u = Math.abs(qx), psi = side > 0 ? e(7) : e(6);
+        if (Math.abs(qx) < snap) qx = 0;                                  // onto the centre (keel) crease
+        const phi = e(5) * Math.PI / 2, side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);
+        let u = Math.abs(qx); if (Math.abs(u - d) < snap && psi > 0) u = d;  // onto the wing crease
         let X, Z;
         if (u <= d || psi === 0) { X = side * u * Math.cos(phi); Z = -u * Math.sin(phi); }
         else {
           const fx = side * d * Math.cos(phi), fz = -d * Math.sin(phi), w = u - d;
           let a1 = Math.atan2(-Math.sin(phi), side * Math.cos(phi)); if (side < 0 && a1 > 0) a1 -= 2 * Math.PI;
           const al = a1 + ((side > 0 ? 0 : -Math.PI) - a1) * psi;
-          X = fx + w * Math.cos(al); Z = fz + w * Math.sin(al);
+          X = fx + w * Math.cos(al) * (1 + 0.45 * psi); Z = fz + w * Math.sin(al);   // wings spread wide: a broad, bulky plane
         }
         out = [X + side * qz * Math.sin(phi), qy, Z + qz * Math.cos(phi)];
       }
@@ -454,8 +461,9 @@ export class SinkSequence {
       const sv = this.shapeS, tg = this._cardTarget(), sw = Math.sin(t * 1.1) * (1 - Math.abs(sv) * 0.6);
       const up = new V3(0, 1, 0).applyQuaternion(tg.q);
       P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0));
-      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));
+      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 - (sv > 0 ? 0.9 * sv : 0), Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));   // a plane tilts back, top away from you
       const Bt = this.bottle;
+      P.scale.setScalar(1 - 0.22 * Math.max(0, sv));                       // the folded plane sits comfortably on screen
       if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
       else if (sv < 0) {
         const roll = Math.min(1, -sv / 0.72), close = Math.max(0, (-sv - 0.72) / 0.28);   // roll up, then the bottle closes round it
@@ -469,6 +477,7 @@ export class SinkSequence {
       this._shape(this.sendKind, k);
       P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : 0) * k);
       P.quaternion.copy(this._fromQ);
+      if (this.sendKind === 'plane') { P.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), -0.9 * k)); P.scale.setScalar(1 - 0.22 * k); }   // tilts back as it folds
       if (t >= DUR.fold) {
         this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
         if (this.sendKind === 'bottle') { this.bottle.visible = true; this._placeBottle(0.01); this._glass().opacity = 0.38; }
@@ -478,6 +487,7 @@ export class SinkSequence {
       // the paper plane flies up into the chosen contact's circle at the top of the screen
       const k = Math.min(1, t / DUR.plane), e = k * k * (3 - 2 * k);
       if (!this._planeEnd) {
+        this._s0 = P.scale.x;                                              // shrink from the size it was folded at
         const tgt = this.planeTarget?.() || { x: this.dom.clientWidth / 2, y: 60 };
         this._planeEnd = this._screenToWorld(tgt.x, tgt.y, this._cardTarget().D * 0.6);
         const cu = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion), cr = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion);
@@ -491,7 +501,7 @@ export class SinkSequence {
       P.position.copy(pos);
       P.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, fwd, top))
         .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(0, 1, 0), Math.sin(k * Math.PI * 2) * 0.45));   // banks as it swoops
-      P.scale.setScalar(1 - 0.72 * e);
+      P.scale.setScalar(this._s0 * (1 - 0.72 * e));
       if (k >= 1) { this._planeEnd = null; this.onSent?.('plane'); this._arrive(); }
     } else if (this.mode === 'bottle') {
       // a glass bottle closes round the scroll, drops into the sea, bobs and sinks away
