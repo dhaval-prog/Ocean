@@ -138,7 +138,12 @@ Object.assign(weather.cur, weather.target);                      // start in the
 const saveWeather = () => {
   try { localStorage.setItem(WX_KEY, JSON.stringify({ mode: weather.mode, preset: weather.preset, custom: weather.preset === 'custom' ? Object.fromEntries(['storm', 'foam', 'clouds', 'rain', 'fog', 'thunder', 'wind'].map(k => [k, +weather.target[k].toFixed(3)])) : null })); } catch {}
 };
-weather.onThunder = (delay, strength) => ambience.thunder(delay, strength);
+weather.onThunder = (delay, strength, near) => {
+  ambience.thunder(delay, strength, near);
+  // the strike lights the sea most under it: close ones in view, distant ones far off
+  const a = Math.random() * Math.PI * 2, r = near ? 4 + Math.random() * 14 : 40 + Math.random() * 40;
+  ocean.uniforms.uFlashPos.value.set(controls.center.x + Math.cos(a) * r, controls.center.z - Math.abs(Math.sin(a)) * r);
+};
 const saveTod = () => { try { localStorage.setItem(MODE_KEY, state.mode); localStorage.setItem(TOD_KEY, String(state.tod % 5)); } catch {} };
 let todLabelAt = 0;
 function showTod() {
@@ -373,7 +378,7 @@ renderer.setAnimationLoop(() => {
   weather.update(dt);
   ocean.setWeather(weather, dt);
   applyLook();
-  flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.35).toFixed(3) : '0';
+  flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.3).toFixed(3) : '0';
   if ((wxSyncAt -= dt) <= 0) { wxSyncAt = 0.5; ui.setWeatherValues(weather.cur); }
   const W = weather.cur;
   // ambient particles: no petals or rising glints in the rain
@@ -417,7 +422,7 @@ renderer.setAnimationLoop(() => {
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: lookWx, storm: ocean.storm, pixelRatio, glintColor });
-  streaks.update(elapsed, ocean.storm, ocean.light, weather.windDir, W.wind);
+  streaks.update(elapsed, ocean.storm, ocean.light, weather.windDir, W.wind, (1 - W.rain * 0.9) * (1 - W.fog * 0.85));   // anime wind lines give way to rain and fog
   post.update(L.night, ocean.storm);
   ambience.update(ocean.storm, L.night, W.rain, W.wind);
 

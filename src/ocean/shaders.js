@@ -9,7 +9,10 @@ uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
 uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1 | bow distance, half beam
 uniform float uBoatShadow; uniform vec2 uLightDir; uniform vec3 uLightCol; uniform float uRefl;
 uniform float uClouds; uniform float uCloudT; uniform float uRain; uniform float uFog; uniform vec3 uFogCol;
-uniform float uFlash; uniform float uRainbow; uniform float uThunder;
+uniform float uFlash; uniform float uRainbow; uniform float uThunder; uniform vec2 uFlashPos;
+// where rain falls heaviest: broad sheets sweeping downwind (same formula as Rain.js)
+float rainSheet(vec2 p, vec2 w, float t){ vec2 wp = vec2(-w.y, w.x);
+  return clamp(0.5 + 0.5*sin(dot(p, wp)*0.11 - t*0.35)*sin(dot(p, w)*0.07 - t*0.5 + 1.3) + 0.25*sin(dot(p, w)*0.031 + dot(p, wp)*0.023 - t*0.21), 0.0, 1.0); }
 const vec3 GLOW = vec3(0.3, 0.95, 1.0);   // night bioluminescence: cyan-blue
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -197,11 +200,15 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, pal[8], min(sp*1.4, 1.0));
     c += pal[8]*sp*fx.z*0.15;
 
-    // flat cartoon cloud shadows drifting across the sea (daytime)
-    // more cover as the clouds build, faster and darker in a thunderstorm
-    float cth = 0.6 - uClouds*0.2;
-    float cs = smoothstep(cth, cth + 0.015, oc_fbm(p*0.035 + uWind*uCloudT*0.012 + vec2(0.0, uCloudT*0.004) + 40.0));
-    c = mix(c, c*vec3(0.74, 0.84, 0.92)*(1.0 - uThunder*0.25), cs*(0.5 + uThunder*0.25)*(1.0 - fx.z*0.8));
+    // cloud shadows drifting across the sea (daytime): soft-edged like real
+    // ones, a big faint layer under a smaller denser one; more cover as the
+    // clouds build, faster and darker in a thunderstorm
+    float cth = 0.6 - uClouds*0.22;
+    vec2 cp = p*0.035 + uWind*uCloudT*0.012 + vec2(0.0, uCloudT*0.004) + 40.0;
+    float cs = smoothstep(cth - 0.03, cth + 0.07, oc_fbm(cp));
+    float cs2 = smoothstep(0.45, 0.7, oc_fbm(cp*0.45 + uWind*uCloudT*0.003 + 7.0)) * (0.3 + uClouds*0.5);
+    float cShade = clamp(cs*(0.45 + uThunder*0.25) + cs2*0.3, 0.0, 0.85);
+    c = mix(c, c*vec3(0.74, 0.84, 0.92)*(1.0 - uThunder*0.25), cShade*(1.0 - fx.z*0.8));
 
     // camera-relative frame, measured in camera heights so it holds at any zoom
     vec2 rel = vWPos.xz - cameraPosition.xz;
@@ -239,6 +246,8 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       float gl = dash * step(0.8 - band*0.35*uRefl, oc_hash(gc + floor(t*0.8 + gh)*7.1)) * sin(ph*3.14159);
       float refl = band * uRefl * (1.0 - uStorm*0.65) * (1.0 - cs*0.6) * (1.0 - uClouds*0.9) * (1.0 - uFog*0.7);
       c += uLightCol * refl * (0.09 + gl*2.0);
+      // in fog the sun is a soft diffuse glow instead of glitter
+      c += uLightCol * band * uRefl * uFog * (1.0 - uClouds*0.6) * (1.0 - uStorm*0.6) * 0.22;
     }
 
     // sky reflection on the far side, deeper up close
@@ -250,46 +259,73 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, vec3(lum)*vec3(0.82, 0.98, 0.94), uStorm*uStorm*0.7);
     c *= 1.0 - uStorm*0.2;
 
+    // gale: foam blown into long streaks lying along the wind (spindrift)
+    float gale = smoothstep(0.55, 0.95, uStorm);
+    if (gale > 0.0) {
+      vec2 sq = vec2(dot(p, uWind)*0.1 - fl*0.3, dot(p, wperp)*2.4) + warp*0.4;
+      float gst = smoothstep(0.64, 0.76, oc_noise(sq)) * smoothstep(0.3, 0.6, oc_noise(sq*vec2(0.6, 0.12) + 13.0))
+                * smoothstep(0.35, 0.65, oc_noise(sq*vec2(3.2, 0.4) + 29.0));        // broken into shorter streaks
+      c = mix(c, mix(pal[5], vec3(lum), 0.45), gst*gale*0.55*(1.0 - fx.z*0.4));
+    }
+
     // overcast: flatter, greyer, a little darker
     float lum2 = dot(c, vec3(0.299, 0.587, 0.114));
-    c = mix(c, vec3(lum2)*vec3(0.95, 1.0, 1.02), uClouds*0.35);
-    c *= 1.0 - uClouds*0.12;
+    c = mix(c, vec3(lum2)*vec3(0.93, 0.99, 1.04), uClouds*0.55);   // diffuse light: colours go dull and grey
+    c *= 1.0 - uClouds*0.17;
 
-    // rain: little rings popping all over the water, one per cell at a time
+    // rain on the water: a dimpled, darker surface where it is falling, with
+    // small rings of different sizes popping everywhere; heaviest under the
+    // sheets of rain sweeping across (they match the falling drops)
+    float rainHere = 0.0;
     if (uRain > 0.01) {
-      vec2 rp = p*0.85, rc = floor(rp), rf = fract(rp);
-      float h = oc_hash(rc), per = 0.55 + h*0.5, rt = t/per + h*9.0, ri = floor(rt), rk = fract(rt);
-      vec2 ctr = vec2(oc_hash(rc + ri*1.7), oc_hash(rc + ri*2.3 + 4.0))*0.56 + 0.22;
-      float on2 = step(oc_hash(rc + ri*3.1 + 9.0), uRain*0.85);
-      float rr = length(rf - ctr), rad = rk*0.24;
-      float ring = smoothstep(0.026, 0.008, abs(rr - rad)) * (1.0 - rk) * on2;
-      float dot0 = smoothstep(0.04, 0.0, rr) * smoothstep(0.25, 0.0, rk) * on2;
-      c = mix(c, mix(pal[5], vec3(lum2), 0.3), clamp(ring*0.55 + dot0*0.6, 0.0, 1.0)*(1.0 - fx.z*0.4));
-      c += GLOW*ring*fx.z*0.25;
-      c *= 1.0 - uRain*0.06;
+      float sheet = rainSheet(p, uWind, t);
+      rainHere = uRain * (0.45 + 0.75*sheet);
+      float dimp = oc_noise(p*7.0 + vec2(t*13.0, -t*11.0)) - 0.5;            // pitted by countless drops
+      c *= 1.0 - rainHere*0.1 + dimp*0.08*rainHere;
+      float rings = 0.0, splash = 0.0;
+      for (int L = 0; L < 2; L++) {
+        float sc = L == 0 ? 1.1 : 2.3;
+        vec2 rp = p*sc + float(L)*17.3, rc = floor(rp), rf = fract(rp);
+        float h = oc_hash(rc), per = 0.5 + h*0.6, rt = t/per + h*9.0, ri = floor(rt), rk = fract(rt);
+        vec2 ctr = vec2(oc_hash(rc + ri*1.7), oc_hash(rc + ri*2.3 + 4.0))*0.6 + 0.2;
+        float on2 = step(oc_hash(rc + ri*3.1 + 9.0), rainHere*0.9);
+        float rr = length(rf - ctr), rad = sqrt(rk)*(0.16 + 0.12*oc_hash(rc + ri*5.3));
+        rings += smoothstep(0.022, 0.006, abs(rr - rad)) * (1.0 - rk)*(1.0 - rk) * on2;
+        splash += smoothstep(0.035, 0.0, rr) * smoothstep(0.18, 0.0, rk) * on2;
+      }
+      vec3 lit = c*1.35 + 0.04;                                                  // rings catch the sky light
+      c = mix(c, lit, clamp(rings*0.5 + splash*0.8, 0.0, 1.0)*(1.0 - fx.z*0.4));
+      c += GLOW*rings*fx.z*0.2;
     }
 
-    // rainbow after rain: a soft cartoon arc on the water, daytime only
+    // rainbow after rain (daytime): a smooth spectrum, violet inside to red
+    // outside, a fainter secondary bow outside it with the colours reversed,
+    // and the slightly darker band of sky between them
     if (uRainbow > 0.01) {
       float al = dot(rel, uViewDir)/camH, ac = dot(rel, vec2(-uViewDir.y, uViewDir.x))/camH;
-      float rr2 = length(vec2(ac, al - 0.15)), rk2 = (rr2 - 0.95)/0.16;        // 0 … 1 across the band
-      if (rk2 > 0.0 && rk2 < 1.0) {
-        float band6 = floor(rk2*6.0);
-        vec3 rb = band6 < 1.0 ? vec3(0.58, 0.42, 0.95) : band6 < 2.0 ? vec3(0.35, 0.55, 1.0) : band6 < 3.0 ? vec3(0.35, 0.85, 0.6)
-                : band6 < 4.0 ? vec3(1.0, 0.92, 0.4) : band6 < 5.0 ? vec3(1.0, 0.65, 0.35) : vec3(1.0, 0.42, 0.45);
-        float ends = smoothstep(-0.1, 0.45, al - 0.15);                     // fades out toward the ends
-        float edge = smoothstep(0.0, 0.08, rk2) * smoothstep(1.0, 0.92, rk2);
-        c = mix(c, rb, edge*ends*uRainbow*0.4*(1.0 - fx.z));
-      }
+      float rr2 = length(vec2(ac, al - 0.15));
+      float ends = smoothstep(-0.1, 0.45, al - 0.15) * uRainbow * (1.0 - fx.z);
+      float k1 = (rr2 - 0.95)/0.13, k2 = (rr2 - 1.22)/0.2;
+      vec3 bow = vec3(0.0);
+      if (k1 > 0.0 && k1 < 1.0) { vec3 h = clamp(abs(fract(0.78*(1.0 - k1) + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0 - 3.0) - 1.0, 0.0, 1.0); bow += h*sin(k1*3.14159)*0.28; }
+      if (k2 > 0.0 && k2 < 1.0) { vec3 h = clamp(abs(fract(0.78*k2 + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0 - 3.0) - 1.0, 0.0, 1.0); bow += h*sin(k2*3.14159)*0.1; }
+      c *= 1.0 - smoothstep(1.06, 1.12, rr2)*smoothstep(1.24, 1.18, rr2)*0.07*ends;  // darker band between the bows
+      c *= 1.0 + smoothstep(0.95, 0.6, rr2)*0.04*ends;                           // a little brighter inside
+      c += bow*ends;
     }
 
-    // lightning: the whole sea lights up for a moment
-    c += (pal[8]*0.4 + vec3(0.55, 0.6, 0.8))*uFlash*0.6;
+    // lightning: blue-white light, brightest under the strike, the rest of the sea lit by the clouds
+    vec2 fdv = (p - uFlashPos)/camH;
+    c += vec3(0.62, 0.68, 0.9)*uFlash*(0.22 + 0.9*exp(-dot(fdv, fdv)*1.4));
 
     // fog: the water fades into soft grey-white with distance
+    // fog: the water fades into soft grey-white with distance, in uneven
+    // banks drifting with the wind. Rain (and more so a storm) brings mist too.
     float fdist = length(rel)/camH;
-    float fogK = uFog*(1.0 - exp(-pow(max(fdist - 0.35, 0.0)*1.1, 1.6)*(0.6 + uFog*2.2)));
-    c = mix(c, uFogCol, clamp(fogK + uFog*0.12, 0.0, 0.97));
+    float mist = max(uFog, rainHere*0.28 + uStorm*uRain*0.22);
+    float bank = 0.45 + 0.9*oc_fbm(p*0.028 - uWind*t*0.35 + 61.0);
+    float fogK = mist*(1.0 - exp(-pow(max(fdist - 0.3, 0.0)*1.1, 1.6)*(0.6 + mist*2.2)*bank));
+    c = mix(c, uFogCol, clamp(fogK + mist*0.1*bank, 0.0, 0.97));
 
     // haze into the sky colour toward the horizon, then fade out at the edge
     float dist = max(abs(vLP.x), abs(vLP.y));

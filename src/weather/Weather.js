@@ -47,7 +47,7 @@ export class Weather {
     this._boltIn = 6; this._flashes = [];
     this._rainPeak = 0; this._rainbowLeft = 0;
     this._local = null; this._localTimer = null;
-    this.onThunder = null;          // (delaySeconds, strength) → play thunder
+    this.onThunder = null;          // (delaySeconds, strength, near) → play thunder; place the strike
     this.onChange = null;           // name / status changed (for the panel)
   }
 
@@ -91,22 +91,26 @@ export class Weather {
     this.windAngle += Math.sign(d) * Math.min(Math.abs(d), dt * 0.004);
     this.windDir[0] = Math.cos(this.windAngle); this.windDir[1] = Math.sin(this.windAngle);
 
-    // lightning: a flash (sometimes a double flicker), thunder a moment later
+    // lightning: a strike flickers in 2-4 return strokes a fraction of a second
+    // apart; close strikes are bright and the thunder cracks almost at once,
+    // distant ones are dim sheet-lightning glows with a late, low rumble
     if (this.cur.thunder > 0.3) {
       if ((this._boltIn -= dt) <= 0) {
-        this._boltIn = 4 + Math.random() * 10;
-        const s = 0.6 + Math.random() * 0.4;
-        this._flashes.push([0, s], [0.12 + Math.random() * 0.1, s * 0.7]);
-        if (Math.random() < 0.4) this._flashes.push([0.45, s * 0.5]);
-        this.onThunder?.(0.6 + Math.random() * 2.2, s);
+        this._boltIn = 3 + Math.random() * 9;
+        const near = Math.random() < 0.35, s = near ? 0.85 + Math.random() * 0.15 : 0.25 + Math.random() * 0.3;
+        let at = 0;
+        const strokes = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < strokes; i++) { this._flashes.push([at, s * (i ? 0.55 + Math.random() * 0.4 : 1)]); at += 0.05 + Math.random() * 0.12; }
+        const delay = near ? 0.15 + Math.random() * 0.5 : 2 + Math.random() * 4;   // sound travels ~1 km in 3 s
+        this.onThunder?.(delay, s, near);
       }
     }
-    this.flash *= Math.exp(-dt * 9);
+    this.flash *= Math.exp(-dt * 14);
     this._flashes = this._flashes.filter(f => { f[0] -= dt; if (f[0] <= 0) { this.flash = Math.max(this.flash, f[1]); return false; } return true; });
 
     // rainbow after rain: once a good shower eases off
     this._rainPeak = Math.max(this._rainPeak * Math.exp(-dt / 120), this.cur.rain);
-    if (this._rainPeak > 0.35 && this.cur.rain < 0.12 && this.cur.clouds < 0.75 && this._rainbowLeft <= 0) { this._rainbowLeft = 110; this._rainPeak = 0; }
+    if (this._rainPeak > 0.35 && this.cur.rain < 0.12 && this.cur.clouds < 0.75 && this.cur.fog < 0.3 && this._rainbowLeft <= 0) { this._rainbowLeft = 110; this._rainPeak = 0; }
     this._rainbowLeft = Math.max(0, this._rainbowLeft - dt);
     const want = this._rainbowLeft > 0 ? Math.min(1, this._rainbowLeft / 20) : 0;
     this.rainbow += (want - this.rainbow) * Math.min(1, dt * 0.3);
