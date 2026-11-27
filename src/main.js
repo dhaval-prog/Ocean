@@ -124,7 +124,10 @@ const ambience = new Ambience();
 letter.audio = ambience;                                  // writing sounds, plops, mood music
 chats.audio = ambience;                                   // a plop as each chat bubble lands
 seq.planeTarget = () => letter.targetPoint();             // the paper plane flies into the chosen contact's circle
-seq.onSent = kind => letter.caught(kind);                 // …which catches it with a splash
+seq.onSent = kind => {
+  letter.caught(kind);
+  chats.logLetter(letter.recipient.id, kind, letter.text.value.trim());   // it shows up in their chat as a plane / bottle
+};                 // …which catches it with a splash
 seq.onSplash = p => { spray.burst(p.x, p.z, ocean.base, 36, 0.9); ambience.plop(5); };   // the bottle hits the sea
 
 const root = document.documentElement;
@@ -481,7 +484,7 @@ window.addEventListener('blur', () => { keys.clear(); applyKeys(); });
 // --- follow mode: the camera keeps the boat in view ---------------------------
 // On by default and whenever you send the boat somewhere; dragging the view
 // turns it off; the button toggles it.
-const followBtn = document.getElementById('follow');
+const followBtn = document.getElementById('follow') || document.createElement('button');   // (no button now: always follows)
 let follow = true;
 function setFollow(on) {
   follow = on;

@@ -29,6 +29,8 @@ const IC = {
   send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   wave: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14c2.2-2.4 4.4-2.4 6.6 0s4.4 2.4 6.6 0 3.3-2 4.8-1.2M3 9.5c2.2-2.4 4.4-2.4 6.6 0s4.4 2.4 6.6 0 3.3-2 4.8-1.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  planeIc: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3L3 10.6l6.6 2.6L21.5 3zm0 0L13 20.5l-3.4-7.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+  bottle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2.5h4v3l1.4 2.4V19a2.5 2.5 0 0 1-2.5 2.5h-1.8A2.5 2.5 0 0 1 8.6 19V7.9L10 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.6 1.8h4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M10.6 11.5h2.8v5.5h-2.8z" fill="currentColor" opacity=".55"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 
@@ -57,22 +59,14 @@ export class Chats {
     this.data = this._load();
     this.code = this._myCode();
 
-    // the chat button, bottom right of the ocean: a glass bubble floating over the sea (all CSS
-    // animation): it wobbles and drifts, its shine glides, a rainbow sheen sweeps across now and then,
-    // three dots pulse inside and tiny bubbles rise from it; a new letter sends up a burst; a tap pops it
+    // the chat button, bottom right of the ocean: solid dark blue with a white chat icon; a new letter
+    // makes it bounce and pops the count; a tap pops it and the chats swarm out of it
     this.btn = document.createElement('button');
     this.btn.type = 'button'; this.btn.className = 'chats-btn';
     this.btn.setAttribute('aria-label', 'Chats');
-    this.btn.innerHTML = `
-      <span class="gb-float"><span class="gb-body">
-        <span class="gb-glass"></span><span class="gb-sheen"></span>
-        <span class="gb-shine"><i class="gb-hl"></i><i class="gb-hl2"></i></span>
-        <span class="gb-dots"><i></i><i></i><i></i></span>
-      </span></span>
-      <span class="gb-rise" aria-hidden="true"></span><span class="badge" hidden></span>`;
+    this.btn.innerHTML = `<span class="cb-solid">${IC.chat}</span><span class="badge" hidden></span>`;   // a solid dark-blue button, white icon
     this.btn.addEventListener('click', e => { e.stopPropagation(); this._popOpen(); });
     root.appendChild(this.btn);
-    this.rise = this.btn.querySelector('.gb-rise');
     this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.saver = false; this._riseIn = 1; this._unreadAt = 0; this._unread = null;
 
@@ -110,22 +104,11 @@ export class Chats {
       if (this._unread != null && n > this._unread) this._newLetter();
       if (n !== this._unread) { this._unread = n; this._badge(); }
     }
-    if ((this._riseIn -= dt) <= 0) {                        // more often while letters are waiting
-      this._riseIn = (this.saver ? 3.2 : this._unread ? 1.1 : 2.1) * (0.7 + Math.random() * 0.6);
-      this._riseOne();
-    }
-  }
-
-  _riseOne(delay = 0) {
-    const b = document.createElement('i'), s = 3 + Math.random() * 4;
-    b.style.cssText = `--s:${s.toFixed(1)}px;--x:${(Math.random() * 14 - 4).toFixed(1)}px;--sway:${(Math.random() * 10 - 5).toFixed(1)}px;--t:${(1.9 + Math.random() * 0.9).toFixed(2)}s;animation-delay:${delay}s`;
-    this.rise.appendChild(b); setTimeout(() => b.remove(), (3 + delay) * 1000);
   }
 
   /** A new letter: a burst of bubbles, a bigger wobble, the count pops. */
   _newLetter() {
-    for (let k = 0; k < 4; k++) this._riseOne(k * 0.12);
-    const body = this.btn.querySelector('.gb-body'); body.classList.remove('boing'); void body.offsetWidth; body.classList.add('boing');
+    const body = this.btn.querySelector('.cb-solid'); body.classList.remove('boing'); void body.offsetWidth; body.classList.add('boing');
     const b = this.btn.querySelector('.badge'); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
   }
 
@@ -161,8 +144,22 @@ export class Chats {
     setTimeout(() => { this._closing = false; this.el.classList.remove('unswarming'); this.close(); }, fast ? 380 : 620);
   }
 
+  /** The chats fill the visible area: when the keyboard opens, the message box sits right on top of it. */
+  _fitViewport() {
+    const vv = window.visualViewport; if (!vv || this.el.hidden) return;
+    Object.assign(this.el.style, { top: vv.offsetTop + 'px', height: vv.height + 'px', bottom: 'auto' });
+    const kb = window.innerHeight - vv.height > 120;
+    this.el.classList.toggle('kb', kb);
+    if (kb) { const m = this.el.querySelector('.c-msgs'); if (m) m.scrollTop = m.scrollHeight; }
+  }
+
   open(page = 'list', arg) {
+    if (!this._vvBound && window.visualViewport) {
+      this._vvBound = true; const fit = () => this._fitViewport();
+      visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit);
+    }
     this.el.hidden = false; this.btn.hidden = true;
+    requestAnimationFrame(() => this._fitViewport());
     document.body.classList.add('chats-open');
     this.stack = []; this.sheetFull = false;
     this.go(page, arg, true);
@@ -172,7 +169,7 @@ export class Chats {
   close() {
     this._stopScan();
     this.el.hidden = true; this.btn.hidden = false;
-    if (!this.reduce) { const body = this.btn.querySelector('.gb-body'); body.classList.remove('reform'); void body.offsetWidth; body.classList.add('reform'); }   // a fresh bubble forms
+    if (!this.reduce) { const body = this.btn.querySelector('.cb-solid'); body.classList.remove('reform'); void body.offsetWidth; body.classList.add('reform'); }   // a fresh bubble forms
     document.body.classList.remove('chats-open');
     this.stack = [];
     this.onOpenChange?.(false);
@@ -472,31 +469,59 @@ export class Chats {
     const name = f ? f.name : g?.name || 'Chat';
     const sub = f ? (f.city || '') + (f.online ? ' · on the ocean now' : '') : `You, ${who.map(p => p.name).join(', ')}`;
     const msgs = this.data.messages[id] || [];
-    // a friend's thread starts with the letters you've swapped (demo)
+    // a friend's thread starts with the letters you've swapped (demo): paper planes, and a bottle from Kenji
     const letters = f ? [
-      ...(f.lastLetter ? [{ from: f.id, letter: true, text: f.lastLetter, at: Date.now() - (f.lastWrote || 1) * DAY - 3 * 3600000 }] : []),
-      { from: 'me', letter: true, text: 'A letter on the waves', at: Date.now() - (f.lastWrote || 1) * DAY },
+      ...(f.lastLetter ? [{ from: f.id, letter: true, kind: f.id === 'kenji' ? 'bottle' : 'plane', text: f.lastLetter, at: Date.now() - (f.lastWrote || 1) * DAY - 3 * 3600000 }] : []),
+      { from: 'me', letter: true, kind: 'plane', text: 'A letter on the waves', at: Date.now() - (f.lastWrote || 1) * DAY },
     ] : [{ sys: true, text: `${esc(name)} was created`, at: g?.at || Date.now() }];
     const all = [...letters, ...msgs].sort((a, b) => a.at - b.at);
+    this._threadLetters = all.filter(m => m.letter); this._threadWho = name;
     const person = id2 => this.friends.find(x => x.id === id2);
     return `
       <header class="c-thead">
-        <button type="button" class="c-round" data-act="back" aria-label="Back">${IC.back}</button>
         ${f ? avatar(f) : `<span class="c-stack">${who.slice(0, 2).map(p => avatar(p, 'sm')).join('')}</span>`}
         <span class="c-mid"><span class="c-name">${esc(name)}</span><span class="c-line">${esc(sub)}</span></span>
       </header>
       <div class="c-msgs">
-        ${all.map(m => m.sys ? `<p class="c-sys">${m.text}</p>`
-          : `<div class="c-msg ${m.from === 'me' ? 'me' : 'them'}${m.letter ? ' is-letter' : ''}">
-              ${!f && m.from !== 'me' ? `<span class="c-from">${esc(person(m.from)?.name || '')}</span>` : ''}
-              ${m.letter ? `<span class="c-letter-tag">✈ ${m.from === 'me' ? 'You threw a letter' : 'Sent you a letter'}</span>` : ''}
-              <span class="c-text">${esc(m.text)}</span><span class="c-at">${ago(m.at)}</span></div>`).join('')}
+        ${all.map(m => {
+          if (m.sys) return `<p class="c-sys">${m.text}</p>`;
+          const mine = m.from === 'me', from = !f && !mine ? `<span class="c-from">${esc(person(m.from)?.name || '')}</span>` : '';
+          if (m.letter) {                                               // a letter: a paper plane or a bottle; tap to read it
+            const bottle = m.kind === 'bottle';
+            return `<button type="button" class="c-msg ${mine ? 'me' : 'them'} c-lmsg" data-letter="${this._threadLetters.indexOf(m)}">${from}
+              <span class="c-lic">${bottle ? IC.bottle : IC.planeIc}</span>
+              <span class="c-ltxt"><b>${bottle ? (mine ? 'You sent a bottle' : 'A bottle for you') : (mine ? 'You threw a paper plane' : 'A paper plane for you')}</b><small>Tap to read</small></span>
+              <span class="c-at">${ago(m.at)}</span></button>`;
+          }
+          return `<div class="c-msg ${mine ? 'me' : 'them'}">${from}<span class="c-text">${esc(m.text)}</span><span class="c-at">${ago(m.at)}</span></div>`;
+        }).join('')}
+      </div>
+      <div class="c-tools">
+        <button type="button" class="c-round" data-act="back" aria-label="Back">${IC.back}</button>
+        ${f ? `<button type="button" class="c-round" data-act="write" data-id="${f.id}" aria-label="Write a letter to ${esc(f.name)}">${IC.planeIc}</button>` : ''}
       </div>
       <form class="c-compose" data-thread="${esc(id)}">
-        ${f ? `<button type="button" class="c-pill is-letter" data-act="write" data-id="${f.id}">✈ Letter</button>` : ''}
         <input class="c-input" name="t" type="text" maxlength="500" placeholder="Message${f ? '' : ' the group'}…" autocomplete="off" aria-label="Message">
         <button type="submit" class="c-send" aria-label="Send">${IC.send}</button>
       </form>`;
+  }
+
+  /** Open a letter from the thread: the paper, handwritten, with who sent it and how. */
+  _showLetter(i) {
+    const m = this._threadLetters?.[i]; if (!m) return;
+    const mine = m.from === 'me', who = mine ? 'You' : (this.friends.find(x => x.id === m.from)?.name || this._threadWho);
+    const v = document.createElement('div'); v.className = 'c-lview'; v.setAttribute('role', 'dialog');
+    v.innerHTML = `<div class="c-lpaper"><span class="c-ltag">${m.kind === 'bottle' ? IC.bottle : IC.planeIc} ${mine ? `You → ${esc(this._threadWho)}` : `From ${esc(who)}`} · ${ago(m.at)}</span>
+      <p>${esc(m.text)}</p><button type="button" class="c-round dark" data-act="close-letter" aria-label="Close the letter">${IC.close}</button></div>`;
+    v.addEventListener('click', e => { if (e.target === v || e.target.closest('[data-act=close-letter]')) { e.stopPropagation(); v.classList.add('out'); setTimeout(() => v.remove(), 200); } });
+    this.el.appendChild(v);
+  }
+
+  /** A letter sent from the ocean shows up in that friend's chat (plane or bottle). */
+  logLetter(id, kind, text) {
+    if (!this.friends.some(f => f.id === id)) return;
+    (this.data.messages[id] ||= []).push({ from: 'me', letter: true, kind, text: text || 'A letter with drawings and stickers', at: Date.now() });
+    this._save();
   }
 
   _scan() {
@@ -511,6 +536,8 @@ export class Chats {
 
   // --- interaction ----------------------------------------------------------------------
   _click(e) {
+    const lt = e.target.closest('[data-letter]');
+    if (lt) { this._showLetter(+lt.dataset.letter); return; }
     const a = e.target.closest('[data-act]'), chat = e.target.closest('[data-chat]'), bub = e.target.closest('.c-bub');
     if (bub) {                                                          // a bubble bursts, and its screen grows out of it
       const page = chat ? 'thread' : bub.dataset.act;

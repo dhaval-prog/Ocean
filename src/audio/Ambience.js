@@ -48,7 +48,7 @@ export class Ambience {
     };
 
     // waves: two swelling layers
-    this.waves = ctx.createGain(); this.waves.gain.value = 0.5; this.waves.connect(this.master);
+    this.waves = ctx.createGain(); this.waves.gain.value = 0; this.waves.connect(this.master);
     for (const [rate, cut] of [[0.09, 420], [0.13, 900]]) {
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cut;
       const g = ctx.createGain(); g.gain.value = 0.35;
@@ -289,7 +289,7 @@ export class Ambience {
   update(storm, night, rain = 0, wind = storm, hail = 0) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.waves.gain.setTargetAtTime(0.45 + storm * 0.6, t, 0.5);
+    this.waves.gain.setTargetAtTime(0, t, 0.5);                       // no ocean wave sound
     this.wind.gain.setTargetAtTime(0.03 + Math.max(storm, wind) * 0.22, t, 0.5);
     this.rain.gain.setTargetAtTime(rain * 0.9, t, 0.8);
     this.hail.gain.setTargetAtTime(hail * 0.7, t, 0.4);
