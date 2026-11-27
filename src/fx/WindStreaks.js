@@ -68,9 +68,10 @@ export class WindStreaks {
   }
 
   /** windDir: world [x, z] (north-up view: screen x = world x, screen up = world −z); wind 0 … 1 */
-  update(elapsed, storm, light, windDir = [1, 0], wind = storm) {
+  /** fade 0 … 1: hides the stylised lines (e.g. in rain or fog) */
+  update(elapsed, storm, light, windDir = [1, 0], wind = storm, fade = 1) {
     this.uniforms.uTime.value = elapsed;
-    this.uniforms.uStrength.value = (0.18 + Math.max(storm, wind) * 0.6) * (0.5 + 0.5 * light);
+    this.uniforms.uStrength.value = (0.18 + Math.max(storm, wind) * 0.6) * (0.5 + 0.5 * light) * fade;
     const x = windDir[0], y = -windDir[1], l = Math.hypot(x, y) || 1;
     this.uniforms.uDir.value.set(x / l, y / l);
   }

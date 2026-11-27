@@ -60,7 +60,7 @@ export class Ocean {
       uLightCol: { value: new THREE.Color('#fff6e2') }, uRefl: { value: 0.55 },
       // weather (set by the app from Weather each frame)
       uClouds: { value: 0 }, uCloudT: { value: 0 }, uRain: { value: 0 }, uFog: { value: 0 }, uFogCol: { value: new THREE.Color('#dfe6ea') },
-      uFlash: { value: 0 }, uRainbow: { value: 0 }, uThunder: { value: 0 },
+      uFlash: { value: 0 }, uRainbow: { value: 0 }, uThunder: { value: 0 }, uFlashPos: { value: new THREE.Vector2() },
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
@@ -125,7 +125,7 @@ export class Ocean {
     const U = this.uniforms, c = wx.cur;
     this.storm = c.storm; this.foam = c.foam;
     U.uClouds.value = c.clouds; U.uRain.value = c.rain; U.uFog.value = c.fog; U.uThunder.value = c.thunder;
-    U.uFlash.value = wx.flash; U.uRainbow.value = wx.rainbow * Math.max(0, (this.light - 0.5) / 0.5);
+    U.uFlash.value = wx.flash; U.uRainbow.value = wx.rainbow * Math.max(0, (this.light - 0.5) / 0.5) * (1 - c.rain) * (1 - c.fog);   // needs sun, no rain or fog
     U.uCloudT.value += dt * (1 + c.storm * 2 + c.thunder * 3);    // clouds race in a thunderstorm
     U.uWind.value.set(wx.windDir[0], wx.windDir[1]);
   }

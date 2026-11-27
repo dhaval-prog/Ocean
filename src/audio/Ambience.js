@@ -32,6 +32,7 @@ export class Ambience {
     // white noise for rain hiss
     const wbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), w = wbuf.getChannelData(0);
     for (let i = 0; i < w.length; i++) w[i] = Math.random() * 2 - 1;
+    this._whiteBuf = wbuf;
     const lfo = (rate, depth, target) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(target); o.start();
@@ -130,10 +131,18 @@ export class Ambience {
     }
   }
 
-  /** Rolling thunder after `delay` seconds; strength 0 … 1 (closer = sharper crack). */
-  thunder(delay = 1, strength = 1) {
+  /** Thunder after `delay` seconds; strength 0 … 1. Close strikes open with a sharp crack. */
+  thunder(delay = 1, strength = 1, near = strength > 0.75) {
     if (!this.ctx || this.muted || !this._noiseBuf) return;
-    const ctx = this.ctx, t = ctx.currentTime + delay, dur = 3 + strength * 3;
+    const ctx = this.ctx, t = ctx.currentTime + delay, dur = 3 + strength * 4;
+    if (near && this._whiteBuf) {
+      // the crack: a bright, ripping burst
+      const cs = ctx.createBufferSource(); cs.buffer = this._whiteBuf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.6;
+      const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.55 * strength, t + 0.01);
+      cg.gain.setTargetAtTime(0.25 * strength, t + 0.05, 0.03); cg.gain.setTargetAtTime(0.0001, t + 0.18, 0.12);
+      cs.connect(bp); bp.connect(cg); cg.connect(this.master); cs.start(t); cs.stop(t + 1);
+    }
     const src = ctx.createBufferSource(); src.buffer = this._noiseBuf; src.loop = true;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180 + strength * 500; lp.Q.value = 0.7;
     lp.frequency.setValueAtTime(180 + strength * 500, t); lp.frequency.exponentialRampToValueAtTime(90, t + dur);
@@ -141,7 +150,9 @@ export class Ambience {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.9 * strength, t + 0.08 + (1 - strength) * 0.4);    // crack, or a distant swell
     g.gain.setTargetAtTime(0.5 * strength, t + 0.4, 0.3);
-    g.gain.setTargetAtTime(0.0001, t + 1.2, dur / 4);                                   // long rumble
+    // rolls: the rumble swells again a few times as echoes come back off the clouds
+    for (let i = 0, at = 0.8; i < 3; i++, at += 0.6 + Math.random() * 1.1) g.gain.setTargetAtTime((0.55 - i * 0.12) * strength * (0.7 + Math.random() * 0.5), t + at, 0.25);
+    g.gain.setTargetAtTime(0.0001, t + 3.2, dur / 4);                                   // long fade
     src.connect(lp); lp.connect(g); g.connect(this.master);
     src.start(t, Math.random() * 3); src.stop(t + dur + 1);
   }
