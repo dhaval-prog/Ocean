@@ -41,7 +41,7 @@ let hqGraphics = (() => { try { const g = localStorage.getItem('ocean.graphics')
 const SAVER_DPR = 1.25;
 const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
 let pixelRatio = hqGraphics ? maxDpr : Math.min(maxDpr, SAVER_DPR);
-let calmSince = 0, stillFrameAt = 0, needFrame = false, ringsAt = 0;   // battery saver's still picture (see the loop)
+let calmSince = 0, stillFrameAt = 0, needFrame = false, ringsAt = 0, chatsAt = 0;   // battery saver's still picture (see the loop)
 renderer.setPixelRatio(pixelRatio);
 renderer.domElement.className = 'scene';
 app.prepend(renderer.domElement);
@@ -580,11 +580,12 @@ renderer.setAnimationLoop(() => {
   const nowMs = performance.now(), isCalm = calm(nowMs);
   // battery saver, letter open and flat: the sea stays frozen whatever you do on the letter (typing,
   // tapping, stickers, drawing, voice, choosing a friend); only folding / rolling / sending wakes it
-  const still = !hqGraphics && ((seq.mode === 'card' && letter.visible) || (seq.mode === 'idle' && chats?.isOpen));   // also behind the chats sheet
+  const still = (!hqGraphics && seq.mode === 'card' && letter.visible) || (seq.mode === 'idle' && !!chats?.isOpen);   // the chats always sit on a still (blurred) sea
   calmSince = still ? (calmSince || nowMs) : 0;
   if (still && nowMs - calmSince > 500) {
     if (!needFrame) {
       if (nowMs - ringsAt >= 100) { letter.update(Math.min(0.25, (nowMs - (ringsAt || nowMs)) / 1000)); ringsAt = nowMs; }
+      if (chats?.isOpen) { chats.update(Math.min(0.05, (nowMs - (chatsAt || nowMs)) / 1000)); chatsAt = nowMs; }   // the bubbles keep drifting
       timer.update();                                    // time keeps moving, so nothing jumps when it wakes up
       return;
     }
