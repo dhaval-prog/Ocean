@@ -9,7 +9,7 @@
 //   lastWrote:  days since you last wrote to them
 //   streak:     days in a row you've written to each other (shown when you long-press to peek)
 //   writes:     how often you write to them (night constellations join the closest)
-//   birthday:   'MM-DD' (or 'today' for the demo): fish leap out of their circle
+//   birthday:   'MM-DD' (or 'today' for the demo): confetti when you pick them
 // The two demo photos are illustrations, not real people.
 export const ME = { id: 'me', name: 'Dhaval', city: 'Mumbai', initials: 'DD', color: '#ef8f73', ring: '#c9684e' };
 

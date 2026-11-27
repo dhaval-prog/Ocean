@@ -9,16 +9,13 @@ import { todFromClock } from '../core/Clock.js';
 //   - "writing to you…": bubbles rise faster and the ring pulses outward
 //   - long-press to peek: their status, the first line of their last letter, when you last wrote
 //   - drag a circle down onto the letter: it splashes and writes "Dear …,"
-//   - new letters arrive as a bottle bobbing into the ring, the number pops up
-//   - birthday fish + confetti, night lanterns over online
-//     friends, night constellations between the friends you write to most,
-//     their status floating in a bottle (tap to pop the cork)
+//   - a new letter arriving: the number pops up
+//   - birthday confetti, night lanterns over online
+//     friends, night constellations between the friends you write to most
 // The "writing" and "new letter" moments are simulated for the demo.
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const BOTTLE = '<svg viewBox="0 0 24 24"><path d="M10 2h4v3l1 2v13a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V7l1-2z" fill="rgba(190,235,240,.75)" stroke="#2f6f7a" stroke-width="1.4"/><rect x="10" y="1" width="4" height="3" rx="1" fill="#b07a45" class="cork"/><path d="M10.5 11h3v6h-3z" fill="#fff7e3" stroke="#c9a46a" stroke-width=".8"/></svg>';
 const LANTERN = '<svg viewBox="0 0 24 32"><path d="M12 1v4" stroke="#7a5a3a" stroke-width="1.4"/><path d="M6 8c0-2 2.7-3 6-3s6 1 6 3v12c0 2-2.7 3-6 3s-6-1-6-3z" fill="#ffcf73" stroke="#c0712f" stroke-width="1.4"/><path d="M8 7v15M12 6v17M16 7v15" stroke="#e8964a" stroke-width=".8" opacity=".7"/><path d="M9 25h6l-1 3h-4z" fill="#c0712f"/></svg>';
-const FISH = '<svg viewBox="0 0 32 20"><path d="M2 10c4-7 14-8 20-2l8-5-2 7 2 7-8-5C16 18 6 17 2 10z" fill="#ff9d4d" stroke="#7a3a2a" stroke-width="1.3"/><circle cx="8" cy="9" r="1.4" fill="#2a1a1a"/></svg>';
 
 function hourIn(tz) {
   try {
@@ -49,15 +46,10 @@ export class CircleFX {
     this.weather = {};                 // friend id → 'rain' | 'snow' | null
     this.myPrecip = null;
     this._wx = false;
-    this._t = { writing: 12 + Math.random() * 10, arrive: 25 + Math.random() * 15, fish: 3, col: 0 };
+    this._t = { writing: 12 + Math.random() * 10, arrive: 25 + Math.random() * 15, col: 0 };
     const people = letter.recipients;
     letter.people.forEach((btn, i) => {
       const p = people[i], port = btn.querySelector('.port');
-      if (p.status) {                                           // status in a bottle
-        port.insertAdjacentHTML('beforeend', `<button type="button" class="sbottle" aria-label="${esc(p.name)}'s status">${BOTTLE}</button>`);
-        port.querySelector('.sbottle').addEventListener('click', e => { e.stopPropagation(); this._popStatus(btn, p); });
-        port.querySelector('.sbottle').addEventListener('pointerdown', e => e.stopPropagation());
-      }
       if (p.online) port.insertAdjacentHTML('beforeend', `<span class="lantern" aria-hidden="true">${LANTERN}</span>`);
       if (birthdayToday(p)) { btn.classList.add('birthday'); p._bday = true; }
       port.insertAdjacentHTML('beforeend', '<span class="pulse" aria-hidden="true"></span><span class="pulse p2" aria-hidden="true"></span>');
@@ -83,10 +75,9 @@ export class CircleFX {
       it.precip = p && p.id !== 'me' ? this.weather[p.id] || null : this.myPrecip;
     });
     if ((T.col -= dt) <= 0) { T.col = 20; this._recolour(); }
-    // demo moments: a friend writing to you, a new letter arriving, birthday fish
+    // demo moments: a friend writing to you, a new letter arriving
     if ((T.writing -= dt) <= 0) { T.writing = 22 + Math.random() * 20; this._startWriting(); }
     if ((T.arrive -= dt) <= 0) { T.arrive = 30 + Math.random() * 25; this._arrive(); }
-    if ((T.fish -= dt) <= 0) { T.fish = 3.5 + Math.random() * 3; L.people.forEach((b, i) => L.recipients[i]._bday && this._leap(b)); }
     // night: lanterns over online friends, constellations between close friends
     const night = L.look.light < 0.5;
     if (night !== this.night) { this.night = night; L.row.classList.toggle('night', night); }
@@ -139,8 +130,6 @@ export class CircleFX {
     const L = this.L, cands = L.recipients.map((p, i) => i).filter(i => i !== 0 && i !== L.index);
     if (!cands.length) return;
     const i = cands[Math.floor(Math.random() * cands.length)], p = L.recipients[i], port = L.people[i].querySelector('.port');
-    const b = document.createElement('span'); b.className = 'arrive'; b.innerHTML = BOTTLE; port.appendChild(b);
-    setTimeout(() => b.remove(), 2600);
     setTimeout(() => {
       p.unread = (p.unread || 0) + 1;
       let badge = port.querySelector('.badge.unread');
@@ -148,16 +137,10 @@ export class CircleFX {
       badge.classList.remove('bump'); void badge.offsetWidth; badge.classList.add('bump');
       badge.textContent = p.unread > 99 ? '99+' : p.unread;
       L.audio?.plop(i + 3);
-    }, 1500);
+    }, 300);
   }
 
-  // --- birthday: fish leap out of the ring; confetti when you pick them ------------------
-  _leap(btn) {
-    const port = btn.querySelector('.port'), f = document.createElement('span');
-    f.className = 'leap'; f.innerHTML = FISH; f.style.setProperty('--side', Math.random() < 0.5 ? -1 : 1);
-    port.appendChild(f); setTimeout(() => f.remove(), 1600);
-  }
-
+  // --- birthday: confetti when you pick them ---------------------------------------------
   confetti(btn) {
     const port = btn.querySelector('.port'), cols = ['#ff7a59', '#ffc94a', '#5ed39b', '#4aa8ff', '#b27bff', '#ff9ec7'];
     for (let k = 0; k < 18; k++) {
@@ -183,16 +166,6 @@ export class CircleFX {
     svg.innerHTML = `<path d="${d}"/>${pts.map(([x, y], k) => `<circle cx="${x.toFixed(1)}" cy="${(y - 0).toFixed(1)}" r="2.2" style="animation-delay:${k * 0.4}s"/>`).join('')}`;
   }
 
-  // --- status in a bottle -------------------------------------------------------------------
-  _popStatus(btn, p) {
-    const port = btn.querySelector('.port'), b = port.querySelector('.sbottle');
-    b.classList.remove('popped'); void b.offsetWidth; b.classList.add('popped');
-    this.L.audio?.cork();
-    port.querySelector('.say')?.remove();
-    const say = document.createElement('span'); say.className = 'say'; say.textContent = p.status;
-    port.appendChild(say); setTimeout(() => say.remove(), 3200);
-  }
-
   // --- the circle catches a letter --------------------------------------------------------
   catch(i, kind) {
     const btn = this.L.people[i]; if (!btn) return;
@@ -209,7 +182,6 @@ export class CircleFX {
     const L = this.L;
     let pr = null;
     L.people.forEach((btn, i) => btn.addEventListener('pointerdown', e => {
-      if (e.target.closest('.sbottle')) return;
       pr = { id: e.pointerId, i, btn, x: e.clientX, y: e.clientY, mode: null };
       pr.timer = setTimeout(() => { if (pr && !pr.mode && L.recipients[i].id !== 'me') { pr.mode = 'peek'; this.busy = true; this._peek(btn, L.recipients[i]); } }, 450);
     }));
