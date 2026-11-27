@@ -45,9 +45,9 @@ export class WaterRings {
       const cv = document.createElement('canvas');
       cv.className = 'water'; cv.setAttribute('aria-hidden', 'true');
       port.prepend(cv);
-      // per ring: its own clock (speed), how lively the water is (calm), a koi,
+      // per ring: its own clock (speed), how lively the water is (calm),
       // rain / snow inside (precip) and its own colours (col, else the sea's)
-      return { port, cv, ctx: cv.getContext('2d'), w: waves(i * 7.31 + 3.7), size: 0, t: Math.random() * 50, speed: 1, calm: 1, koi: false, precip: null, col: null, drops: [] };
+      return { port, cv, ctx: cv.getContext('2d'), w: waves(i * 7.31 + 3.7), size: 0, t: Math.random() * 50, speed: 1, calm: 1, precip: null, col: null, drops: [] };
     });
   }
 
@@ -121,22 +121,7 @@ export class WaterRings {
       g.lineWidth = 1.3;
       g.beginPath(); g.arc(c, c, mid + Math.sin(t + k) * thick * 0.2, a0, a0 + span); g.stroke();
     }
-    if (it.koi) this._koi(g, c, faceR * 1.11, t);
     if (it.precip) this._precip(it, g, c, faceR, dt);
-  }
-
-  /** A little koi swimming laps in the gap between the picture and the water. */
-  _koi(g, c, r, t) {
-    const a = t * 0.9, x = c + r * Math.cos(a), y = c + r * Math.sin(a), s = Math.max(3.2, r * 0.13);
-    g.save(); g.translate(x, y); g.rotate(a + Math.PI / 2);                  // facing along its path
-    const wag = Math.sin(t * 9) * 0.35;
-    g.fillStyle = '#ff8a3d'; g.strokeStyle = 'rgba(80, 30, 10, 0.55)'; g.lineWidth = 0.7;
-    g.beginPath(); g.ellipse(0, 0, s * 0.42, s, 0, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.fillStyle = '#fff3e8'; g.beginPath(); g.ellipse(0, s * 0.15, s * 0.22, s * 0.38, 0, 0, Math.PI * 2); g.fill();   // white patch
-    g.save(); g.translate(0, -s * 0.95); g.rotate(wag);                       // tail fin, wagging
-    g.fillStyle = '#ff8a3d'; g.beginPath(); g.moveTo(0, 0); g.lineTo(-s * 0.5, -s * 0.7); g.lineTo(s * 0.5, -s * 0.7); g.closePath(); g.fill(); g.restore();
-    g.fillStyle = '#2a1a12'; g.beginPath(); g.arc(-s * 0.18, s * 0.62, s * 0.08, 0, Math.PI * 2); g.arc(s * 0.18, s * 0.62, s * 0.08, 0, Math.PI * 2); g.fill();
-    g.restore();
   }
 
   /** Rain or snow falling inside the circle (their weather). */

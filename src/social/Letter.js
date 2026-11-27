@@ -21,7 +21,6 @@ const ICONS = {
   stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15zM10 20.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/></svg>',
   inbox: '<svg viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 13h4.5l1.5 2h4l1.5-2H20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>',
-  boat: '<svg viewBox="0 0 24 24"><path d="M3 14h18l-2.5 4.5h-13z" fill="currentColor"/><path d="M7 14v-3.5h6.5V14M9 10.5V8h3v2.5M15.5 14v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 20a7 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   pen: '<svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.5 7l3.5 3.5" stroke="currentColor" stroke-width="1.8"/></svg>',
   eraser: '<svg viewBox="0 0 24 24"><path d="M5 15l8-8 6 6-6 6H9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 19h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -113,7 +112,7 @@ export class Letter {
     this.row.className = 'people';
     this.row.hidden = true;
     // each avatar sits in a circle of water (WaterRing.js) round a photo or the
-    // coloured initials; extras (orbiting boat, shells, bottle …) come from Circles.js
+    // coloured initials; extras (bottle, lanterns …) come from Circles.js
     const bubbles = '<span class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
     const water = k => `style="--d:${((k * 0.83) % 2.6).toFixed(2)}s"`;
     const avatar = (p, i) => {
@@ -128,7 +127,7 @@ export class Letter {
             ${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
             ${bubbles}
           </span>
-          ${p.online ? `<span class="orbit" aria-hidden="true"><span class="online" title="On the ocean now">${ICONS.boat}</span></span>` : ''}
+          ${p.online ? `<span class="online" title="On the ocean now" aria-hidden="true"></span>` : ''}
           ${p.unread ? `<span class="badge unread" aria-hidden="true">${p.unread > 99 ? '99+' : p.unread}</span>` : ''}
         </span>
         <span class="name">${esc(p.name)}</span><span class="city">${esc(p.city)}</span>
@@ -148,7 +147,6 @@ export class Letter {
     this.people = [...this.row.querySelectorAll('.person[data-i]')];
     this.allPeople = [...this.row.querySelectorAll('.person')];
     this.water = new WaterRings([...this.row.querySelectorAll('.port')]);
-    this._readTimer = null;
     this._swipedAt = 0;
     this.people.forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
@@ -201,12 +199,6 @@ export class Letter {
       }
     }
     this._first = false;
-    clearTimeout(this._readTimer);
-    const r0 = this.recipient;
-    if (r0.unread) this._readTimer = setTimeout(() => {
-      r0.unread = 0;
-      this.people[this.index]?.querySelector('.badge.unread')?.classList.add('read');
-    }, 1800);
     if (changed && this.visible) { this._writeDear(); this._typePrompts(); }
     this._layoutRow();
   }
