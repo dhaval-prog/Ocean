@@ -171,16 +171,6 @@ export class Ambience {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.2);
   }
 
-  /** The wax seal pressing down: a soft thump. */
-  stamp() {
-    if (!this.ctx || this.muted) return;
-    const ctx = this.ctx, t = ctx.currentTime + 0.22, o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.15);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.25);
-    this._noiseHit(0.08, 'lowpass', 900, 0.7, 0.06, 0.22);
-  }
-
   /** A cork popping out of a bottle. */
   cork() {
     if (!this.ctx || this.muted) return;
