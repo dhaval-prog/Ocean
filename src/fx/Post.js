@@ -15,7 +15,7 @@ const GradeShader = {
     uInk: { value: 0.6 },
     uTexel: { value: new THREE.Vector2(0.001, 0.001) },
     uWarm: { value: new THREE.Vector3(0.05, 0.02, -0.035) },
-    uCool: { value: new THREE.Vector3(-0.02, 0.0, 0.045) },
+    uCool: { value: new THREE.Vector3(-0.025, 0.008, 0.03) },   // cool shadows, without pushing blues toward violet
     uVig: { value: 0.22 },
     uAspect: { value: 1 },
   },

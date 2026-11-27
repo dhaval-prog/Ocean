@@ -157,6 +157,9 @@ export class Boat {
     this.body.rotation.x += this.sinkRoll;
     this.body.rotation.z -= this.sinkPitch;
 
+    // soft shadow under the hull; fades as it sinks, gone while hidden
+    this.ocean.uniforms.uBoatShadow.value = this.group.visible ? THREE.MathUtils.clamp(1 + this.sinkY / 1.2, 0, 1) : 0;
+
     // --- wake: V of foam + bow splash drawn by the water shader, plus the odd bubble drop
     this.ocean.setBoat(this.position.x, this.position.y, this.heading, Math.max(0, this.speed) / this.maxSpeed, 6.4 * MODEL_SCALE, 2.4 * MODEL_SCALE);
     if (this.speed > 0.6 && (this._wake -= dt) <= 0) {

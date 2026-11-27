@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TIMES } from './palettes.js';
+import { TIMES, STYLES, stylePalette } from './palettes.js';
 import { GLSL_COMMON, GLSL_VERTEX, GLSL_FRAGMENT } from './shaders.js';
 
 // CPU-side noise matching the static base shape of the surface.
@@ -23,6 +23,7 @@ const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b
  *   ocean.setTimeOfDay(2.5);             // 0 Dawn … 4 Night (wraps, blends)
  *   ocean.storm = 0.6;                   // 0 calm … 1 stormy
  *   ocean.foam = 0.35;                   // 0 none … 1 original amount
+ *   ocean.setStyle('tropical');          // ocean colour: deep, tropical, nordic, pastel
  *   ocean.getHeightAt(x, z);             // water height for floating objects
  */
 export class Ocean {
@@ -52,6 +53,11 @@ export class Ocean {
       uRipples: { value: Array.from({ length: 12 }, () => new THREE.Vector4(0, 0, -99, 0)) },
       uObjects: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) },
       uBoat: { value: new THREE.Vector4(0, 0, 0, 0) }, uBoatSize: { value: new THREE.Vector2(1.9, 0.7) },
+      uBoatShadow: { value: 0 },   // 0 … 1, soft shadow under the boat (0 before it loads / while sunk)
+      // sun (moon at night) low over the sea, north-north-east: its path of light
+      // on the water runs from the viewer toward it, so it moves as the view turns
+      uLightDir: { value: new THREE.Vector2(0.22, -1).normalize() },
+      uLightCol: { value: new THREE.Color('#fff6e2') }, uRefl: { value: 0.55 },
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
@@ -79,6 +85,7 @@ export class Ocean {
     this.look = { petals: 0, specks: 0, glints: 0, night: 0 };
     this._ripple = 0;
     this._tmp = new THREE.Color();
+    this.style = 'deep';
     this.setTimeOfDay(1);
   }
 
@@ -87,18 +94,27 @@ export class Ocean {
     const n = TIMES.length; f = ((f % n) + n) % n;
     const i = Math.floor(f), j = (i + 1) % n, k = f - i, e = sm(k);
     const U = this.uniforms;
-    U.uPalA.value.forEach((c, m) => c.set(TIMES[i].pal[m]));
-    U.uPalB.value.forEach((c, m) => c.set(TIMES[j].pal[m]));
+    const A = stylePalette(TIMES[i].pal, this.style, TIMES[i].light), B = stylePalette(TIMES[j].pal, this.style, TIMES[j].light);
+    U.uPalA.value.forEach((c, m) => c.set(A[m]));
+    U.uPalB.value.forEach((c, m) => c.set(B[m]));
     U.uFxA.value.set(...TIMES[i].fx); U.uFxB.value.set(...TIMES[j].fx);
     U.uMix.value = k; // the shader eases and sweeps far → near
-    this.skyColor.set(TIMES[i].pal[9]).lerp(this._tmp.set(TIMES[j].pal[9]), e);
-    this.skyTopColor.set(TIMES[i].pal[2]).lerp(this._tmp.set(TIMES[j].pal[2]), e).lerp(this.skyColor, 0.55);
+    U.uLightCol.value.set(TIMES[i].sun[0]).lerp(this._tmp.set(TIMES[j].sun[0]), e);
+    U.uRefl.value = TIMES[i].sun[1] + (TIMES[j].sun[1] - TIMES[i].sun[1]) * e;
+    this.skyColor.set(A[9]).lerp(this._tmp.set(B[9]), e);
+    this.skyTopColor.set(A[2]).lerp(this._tmp.set(B[2]), e).lerp(this.skyColor, 0.55);
     this.light = TIMES[i].light + (TIMES[j].light - TIMES[i].light) * e;
-    const L = this.look, A = TIMES[i].ambient, B = TIMES[j].ambient, lerp = (a, b) => a + (b - a) * e;
-    for (const key of ['petals', 'specks', 'glints']) L[key] = lerp(A[key], B[key]);
+    const L = this.look, aA = TIMES[i].ambient, aB = TIMES[j].ambient, lerp = (a, b) => a + (b - a) * e;
+    for (const key of ['petals', 'specks', 'glints']) L[key] = lerp(aA[key], aB[key]);
     L.night = lerp(TIMES[i].fx[2], TIMES[j].fx[2]);
     this.timeName = TIMES[Math.round(f) % n].name;
     this.timeOfDay = f;
+  }
+
+  /** Ocean colour style: 'deep' (default), 'tropical', 'nordic' or 'pastel'. */
+  setStyle(id) {
+    this.style = STYLES[id] ? id : 'deep';
+    this.setTimeOfDay(this.timeOfDay);
   }
 
   update(dt, elapsed) {

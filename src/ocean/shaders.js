@@ -7,6 +7,7 @@ uniform float uTime; uniform float uFlow; uniform vec2 uWind; uniform float uHal
 uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uGlitter;
 uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
 uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1 | bow distance, half beam
+uniform float uBoatShadow; uniform vec2 uLightDir; uniform vec3 uLightCol; uniform float uRefl;
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
@@ -96,7 +97,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     trail *= mask * foam;
     float pulse = 0.55 + 0.45*sin(t*2.2 + oc_noise(p*0.45)*6.283);
     c = mix(c, pal[4], smoothstep(0.8, 0.82, r1)*smoothstep(0.25, 0.35, mask)*0.3*foam);
-    c = mix(c, pal[5], lines*0.95);
+    c = mix(c, pal[5], lines*0.95*(1.0 - fx.z*0.35));   // night: foam stays quieter
     c += pal[5]*(trail*0.08 + lines*pulse*0.12)*fx.z;   // night: soft moonlit foam, no strong glow
 
 
@@ -165,11 +166,54 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
 
     // flat cartoon cloud shadows drifting across the sea (daytime)
     float cs = smoothstep(0.56, 0.575, oc_fbm(p*0.035 + vec2(t*0.012, t*0.006) + 40.0));
-    c = mix(c, c*vec3(0.74, 0.8, 0.95), cs*0.55*(1.0 - fx.z));
+    c = mix(c, c*vec3(0.74, 0.84, 0.92), cs*0.55*(1.0 - fx.z));
 
-    // sky reflection on the far side, deeper up close; storm darkens
+    // camera-relative frame, measured in camera heights so it holds at any zoom
+    vec2 rel = vWPos.xz - cameraPosition.xz;
+    float camH = max(cameraPosition.y - 1.2, 1.0);
+
+    // depth: the water deepens toward the far side of the view
+    float fwd = dot(rel, uViewDir) / camH;
+    float deepK = smoothstep(0.25, 1.5, fwd) * 0.3 * (1.0 - fx.z*0.5);
+    c = mix(c, mix(pal[0], pal[1], 0.35), deepK);
+
+    // soft shadow under the boat, nudged away from the sun
+    if (uBoatShadow > 0.0) {
+      vec2 bfwd = vec2(cos(uBoat.z), -sin(uBoat.z)), bside = vec2(-bfwd.y, bfwd.x);
+      vec2 bd = p - uBoat.xy + uLightDir*0.35;
+      float be = length(vec2(dot(bd, bfwd)/(uBoatSize.x*1.08), dot(bd, bside)/(uBoatSize.y*1.55)));
+      c *= 1.0 - smoothstep(1.0, 0.35, be)*0.38*uBoatShadow*(1.0 - fx.z*0.4);
+    }
+
+    // sun (moon at night) path: a soft band of light from the viewer toward it,
+    // broken into glints by the waves. Moves as the view turns; storms dim it.
+    {
+      float along = dot(rel, uLightDir) / camH;
+      float across = dot(rel, vec2(-uLightDir.y, uLightDir.x)) / camH;
+      float band = exp(-pow(across / (0.1 + max(along, 0.0)*0.22), 2.0)) * smoothstep(0.15, 0.9, along);
+      // glints: short crisp dashes lying across the path (cartoon sun glitter),
+      // staggered and jittered so they never read as a grid, each popping on and off
+      vec2 lw = vec2(dot(p, vec2(-uLightDir.y, uLightDir.x)), dot(p, uLightDir)) + warp*0.8;
+      vec2 gp = vec2(lw.x*0.5, lw.y*1.5 - fl*0.35);
+      gp.x += oc_hash(vec2(floor(gp.y), 3.7))*1.7;                       // stagger rows
+      vec2 gc = floor(gp), gf = fract(gp) - 0.5;
+      float gh = oc_hash(gc), ph = fract(t*0.8 + gh);
+      gf -= (vec2(oc_hash(gc + 1.3), oc_hash(gc + 2.9)) - 0.5)*vec2(0.5, 0.4); // jitter inside the cell
+      float len = 0.16 + 0.22*oc_hash(gc + 5.1);
+      float dash = smoothstep(len, len*0.55, abs(gf.x)) * smoothstep(0.16, 0.08, abs(gf.y));   // thick enough to stay bright under the ink pass
+      float gl = dash * step(0.8 - band*0.35*uRefl, oc_hash(gc + floor(t*0.8 + gh)*7.1)) * sin(ph*3.14159);
+      float refl = band * uRefl * (1.0 - uStorm*0.65) * (1.0 - cs*0.6);
+      c += uLightCol * refl * (0.09 + gl*2.0);
+    }
+
+    // sky reflection on the far side, deeper up close
     c = mix(c, pal[9], far*far*0.38);
-    c *= mix(0.84, 1.0, far) * (1.0 - uStorm*0.12);
+    c *= mix(0.84, 1.0, far);
+
+    // storms: the sea turns grey-green and darker (foam is already whipped up above)
+    float lum = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(c, vec3(lum)*vec3(0.82, 0.98, 0.94), uStorm*uStorm*0.7);
+    c *= 1.0 - uStorm*0.2;
 
     // haze into the sky colour toward the horizon, then fade out at the edge
     float dist = max(abs(vLP.x), abs(vLP.y));
