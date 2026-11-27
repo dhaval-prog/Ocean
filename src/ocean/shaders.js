@@ -32,7 +32,10 @@ export const GLSL_VERTEX = /* glsl */ `#include <begin_vertex>
 export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
   {
     vec2 p = vWPos.xz; float t = uTime, fl = uFlow;
-    float far = clamp(dot(vWPos.xz - cameraPosition.xz, uViewDir)/uFarScale*0.5 + 0.5, 0.0, 1.0); // 1 = top of the screen
+    // 0 around the middle of the view … 1 toward the top of the screen, measured in
+    // camera heights so it holds at any zoom (it used to be ~1 everywhere, which
+    // washed the whole sea with sky colour)
+    float far = smoothstep(0.75, 2.2, dot(vWPos.xz - cameraPosition.xz, uViewDir) / max(cameraPosition.y - 1.2, 1.0));
     // time-of-day sweep: far side changes first, light rolls toward the viewer
     float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
     vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
@@ -239,8 +242,8 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     }
 
     // sky reflection on the far side, deeper up close
-    c = mix(c, pal[9], far*far*0.38);
-    c *= mix(0.84, 1.0, far);
+    c = mix(c, pal[9], far*far*0.3);
+    c *= mix(0.94, 1.0, far);
 
     // storms: the sea turns grey-green and darker (foam is already whipped up above)
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
@@ -292,6 +295,6 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float dist = max(abs(vLP.x), abs(vLP.y));
     c = mix(c, mix(pal[9], pal[1], 0.22), smoothstep(uHalf*0.6, uHalf - uFade*0.3, dist) * 0.9);
 
-    diffuseColor.rgb = c * 0.12;
+    diffuseColor.rgb = c * 0.12;   // lit + emissive below ≈ the palette colour, not brighter
     diffuseColor.a = smoothstep(uHalf, uHalf - uFade, dist);
   }`;

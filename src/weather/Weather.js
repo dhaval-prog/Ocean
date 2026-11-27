@@ -3,7 +3,7 @@
 //   const wx = new Weather();
 //   wx.setMode('auto' | 'local' | 'manual');
 //   wx.setPreset('rain');               // manual: Clear, Cloudy, Rain, Storm, Fog
-//   wx.update(dt, { hour, realtime });  // every frame
+//   wx.update(dt);                      // every frame
 //   wx.cur → { storm, foam, clouds, rain, fog, thunder, wind } (smoothed, 0 … 1)
 //   wx.flash (0 … 1 lightning), wx.rainbow (0 … 1), wx.windDir (unit [x, z])
 //
@@ -79,18 +79,12 @@ export class Weather {
     this.onChange?.();
   }
 
-  update(dt, { hour = 12, realtime = false } = {}) {
+  update(dt) {
     if (this.mode === 'auto') this._auto(dt);
 
     // glide toward the target
     const k = 1 - Math.exp(-dt * this.rate);
     for (const key of KEYS) this.cur[key] += (this.target[key] - this.cur[key]) * k;
-
-    // morning fog rolls in around dawn (real time + automatic weather)
-    if (this.mode === 'auto' && realtime) {
-      const bell = Math.max(0, 1 - Math.abs(hour - 6.6) / 1.9);
-      this.cur.fog = Math.max(this.cur.fog, 0.6 * bell * bell * (3 - 2 * bell));
-    }
 
     // wind direction turns slowly (the whole sea pattern follows it)
     let d = Math.atan2(Math.sin(this._windTarget - this.windAngle), Math.cos(this._windTarget - this.windAngle));

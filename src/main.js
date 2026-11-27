@@ -370,8 +370,7 @@ renderer.setAnimationLoop(() => {
     ocean.setTimeOfDay(state.tod);
     if ((todLabelAt -= dt) <= 0) { todLabelAt = 1; showTod(); if (state.mode === 'cycle') saveTod(); }
   }
-  const now = new Date();
-  weather.update(dt, { hour: now.getHours() + now.getMinutes() / 60, realtime: state.mode === 'realtime' });
+  weather.update(dt);
   ocean.setWeather(weather, dt);
   applyLook();
   flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.35).toFixed(3) : '0';

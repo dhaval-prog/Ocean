@@ -73,7 +73,7 @@ export class Ocean {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec2 vLP;' + GLSL_COMMON)
         .replace('#include <color_fragment>', GLSL_FRAGMENT)
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 7.4;');
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 6.4;');
     };
 
     this.mesh = new THREE.Mesh(geo, mat);
