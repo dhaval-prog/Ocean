@@ -92,6 +92,8 @@ export class Letter {
     this.voiceEl = $('.voice'); this.file = $('input[type=file]');
     this.text.addEventListener('input', e => this._onInput(e));
     this.text.addEventListener('scroll', () => { this.ink.scrollTop = this.text.scrollTop; });
+    this.text.addEventListener('focus', () => this._syncHint());
+    this.text.addEventListener('blur', () => setTimeout(() => this._syncHint(), 0));
 
     // sticker images (for painting the finished letter onto the paper)
     for (const k of Object.keys(STICKERS)) { const im = new Image(); im.src = stickerURL(k); seq.images[k] = im; }
@@ -157,6 +159,7 @@ export class Letter {
     let sw = null;
     root.addEventListener('pointerdown', e => {
       if (!this.visible || e.target.closest('.letter, .peek')) return;
+      if (this._shapeable() && !e.target.closest('.people, button')) { this._startShape(e, false); return; }   // fold / roll it by hand
       sw = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
     }, { capture: true });
     window.addEventListener('pointerup', e => {
@@ -219,7 +222,16 @@ export class Letter {
   /** A light haptic tick: vibrate where supported (Android), the switch-control trick on iPhone (iOS 18+). */
   _tick() { try { if (navigator.vibrate) navigator.vibrate(8); else this._haptic?.click(); } catch {} }
 
-  _syncHint() { this.hint.hidden = !this.visible || this.el.hidden || this.text.value.trim().length > 0; }
+  _syncHint() {
+    const m = this.seq.mode, v = this.seq.shapeS || 0;
+    let text = null;
+    if (!this.visible) text = null;
+    else if (m === 'shaping') text = v >= 0.99 ? 'Flick up to throw · drag up to unfold' : v <= -0.99 ? 'Flick up to throw · drag down to unroll' : null;
+    else if (m === 'card') text = !this.hasContent() ? 'Swipe to choose · flick to send'
+      : document.activeElement === this.text ? null : 'Drag down: paper plane · drag up: bottle';
+    if (text) this.hint.textContent = text;
+    this.hint.hidden = !text;
+  }
 
   // --- the look: stationery, ink, mood ---------------------------------------------
   /** From the app: time of day (0 … 5), rain (0 … 1), light (0 … 1). Repaints the paper when it changes. */
@@ -476,6 +488,7 @@ export class Letter {
         this.strokes.push(press.stroke); this._redrawDoodles();
         e.preventDefault(); return;
       }
+      if (this._shapeable()) { this._startShape(e, true); e.preventDefault(); return; }   // fold / roll it by hand
       press = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: null };
       e.preventDefault();
     });
@@ -512,6 +525,78 @@ export class Letter {
         if (Math.abs(dx) > 40) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = performance.now(); }
       }
     });
+  }
+
+  // --- folding and rolling by hand (once something is on the letter) ------------------
+  //   drag down from the letter  → it folds into a paper plane, step by step
+  //   plane: flick up → throw it; drag up → unfold it step by step
+  //   drag up from the letter    → it rolls up, step by step, and goes into a bottle
+  //   bottle: flick up → throw it; drag down → unroll it back into the letter
+  // Each drag stops at the flat letter; letting go part-way settles to the nearest shape.
+
+  /** True when the letter has something on it (words, stickers, a doodle, a photo, a voice note). */
+  hasContent() { return !!(this.text.value.trim() || this.stickers.length || this.strokes.length || this.photo || this.voice?.peaks?.length); }
+
+  _shapeable() {
+    const m = this.seq.mode;
+    return !this.pen && (m === 'shaping' || (m === 'card' && this.hasContent()));
+  }
+
+  _startShape(e, onPaper) {
+    const g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), onPaper, axis: null, side: null, s0: this.seq.mode === 'shaping' ? this.seq.shapeS : 0, trail: [] };
+    this._shapeG = g;
+    const R = () => Math.max(220, window.innerHeight * 0.42);           // drag distance for a full fold
+    const move = ev => {
+      if (ev.pointerId !== g.id) return;
+      const dx = ev.clientX - g.x0, dy = ev.clientY - g.y0;
+      g.trail.push({ y: ev.clientY, t: performance.now() }); if (g.trail.length > 10) g.trail.shift();
+      if (!g.axis) {
+        if (Math.hypot(dx, dy) < 10) return;
+        g.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';
+        if (g.axis === 'y') {
+          this.text.blur(); this._toggleTray(false);
+          g.side = g.s0 > 0 ? 'plane' : g.s0 < 0 ? 'bottle' : dy > 0 ? 'plane' : 'bottle';
+          if (this.seq.mode === 'card') this.seq.beginShape();
+          g.step = Math.floor(Math.abs(g.s0) * 4);
+        }
+      }
+      if (g.axis !== 'y') return;
+      let v = g.s0 + dy / R();
+      v = g.side === 'plane' ? Math.max(0, Math.min(1, v)) : Math.max(-1, Math.min(0, v));
+      this.seq.setShapeS(v);
+      const step = Math.floor(Math.abs(v) * 4 + 0.001);                  // a fold step: a tick and a paper sound
+      if (step !== g.step) { g.step = step; this._tick(); this.audio?.[step % 2 ? 'rustle' : 'scratch'](); }
+      this._syncHint();
+    };
+    const up = ev => {
+      if (ev.pointerId !== g.id) return;
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      this._shapeG = null;
+      const dx = ev.clientX - g.x0, now = performance.now();
+      if (!g.axis) {                                                      // a tap: write (on the flat letter)
+        if (g.onPaper && this.seq.mode === 'card') { this.text.focus(); const n = this.text.value.length; this.text.setSelectionRange(n, n); }
+        return;
+      }
+      if (g.axis === 'x') {                                               // sideways: choose who it's for
+        if (Math.abs(dx) > 40) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = now; if (this.seq.mode === 'shaping') this.seq.paint(this._composition()); }
+        return;
+      }
+      const recent = g.trail.find(q => now - q.t < 200) || g.trail[0];
+      const vy = recent ? (ev.clientY - recent.y) / Math.max(0.016, (now - recent.t) / 1000) : 0;   // px / s (negative = up)
+      const quick = now - g.t0 < 500 && ev.clientY < g.y0 - 50;           // a short, quick swipe up counts too
+      const flickUp = (vy < -650 && ev.clientY < g.y0 - 25) || quick;
+      const done = g.s0 >= 0.97 ? 1 : g.s0 <= -0.97 ? -1 : 0;             // a finished plane (+1) or bottle (−1)
+      if (flickUp && done) {                                              // throw it
+        this.seq.setShapeS(done);
+        this.seq.throwShape();
+        return;
+      }
+      const v = this.seq.shapeS;
+      if (done && flickUp === false && Math.abs(v - done) < 0.02) return;  // at the end already, nothing changed
+      this.seq.snapShape(g.side === 'plane' ? (v > 0.5 ? 1 : 0) : (v < -0.5 ? -1 : 0));
+      setTimeout(() => this._syncHint(), 350);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   }
 
   _redrawDoodles() {
@@ -573,7 +658,14 @@ export class Letter {
   /** Call when the sequence changes mode. */
   onMode(mode) {
     const writing = mode === 'card' || mode === 'held' || mode === 'seal';
-    const rowOn = writing || mode === 'fold' || mode === 'plane' || mode === 'bottle';
+    const rowOn = writing || mode === 'shaping' || mode === 'fold' || mode === 'plane' || mode === 'bottle';
+    if (mode === 'shaping') {                                    // folding / rolling by hand: the letter goes onto the paper, sealed
+      this.text.blur(); this._toggleTray(false);
+      this.seq.paint(this._composition()); this._shaped = true;
+      this.audio?.stamp();
+    }
+    if (mode === 'card' && this._shaped) { this._shaped = false; this.seq.paint(); }   // unfolded again: back to writing on it
+    if (writing && this.visible && this.el.hidden) { this.el.hidden = false; requestAnimationFrame(() => this._redrawDoodles()); }
     if (writing && !this.visible) {
       this.visible = true;
       this.el.hidden = false; this.row.hidden = false;
