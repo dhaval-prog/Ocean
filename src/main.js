@@ -117,6 +117,16 @@ const ui = createControls(document.getElementById('panel'), {
 });
 ocean.setTimeOfDay(state.tod);
 showTod();
+
+// Account button (next to sound) opens / closes the settings. A tap outside
+// the panel or Esc closes it.
+const accountBtn = document.getElementById('account'), panelEl = document.getElementById('panel');
+ui.onOpenChange(open => accountBtn.setAttribute('aria-expanded', String(open)));
+accountBtn.addEventListener('click', e => { e.stopPropagation(); ui.setOpen(!ui.open); });
+window.addEventListener('pointerdown', e => {
+  if (ui.open && !panelEl.contains(e.target) && !accountBtn.contains(e.target)) ui.setOpen(false);
+}, { capture: true });
+window.addEventListener('keydown', e => { if (e.code === 'Escape' && ui.open) { ui.setOpen(false); accountBtn.focus(); } });
 applyLook();
 
 // Sound: starts on the first tap (browsers block audio before that).
