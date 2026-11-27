@@ -503,11 +503,11 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 .panel .check.gfx input[switch] { accent-color: #3d4aa3; }
 
 /* --- chats: list, new group, add a friend, scanner, thread ------------------ */
-.chats-btn { --gb-glow: #fff; position: absolute; z-index: 9; right: calc(12px + var(--safe-r, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 78px; height: 78px;
+.chats-btn { --gb-glow: #fff; position: absolute; z-index: 9; right: calc(12px + var(--safe-r, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px;
   padding: 0; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .chats-btn[hidden] { display: none; }
 /* a glass bubble: drifts up and down (float) while it wobbles (body), slightly out of step */
-.chats-btn .gb-float { position: absolute; inset: 9px; animation: gb-drift 4.4s ease-in-out infinite; }
+.chats-btn .gb-float { position: absolute; inset: 10px; animation: gb-drift 4.4s ease-in-out infinite; }
 .chats-btn .gb-body { position: absolute; inset: 0; border-radius: 50%; animation: gb-wobble 3.4s ease-in-out infinite; transition: transform 0.16s ease-out;
   filter: drop-shadow(0 3px 5px rgba(8, 36, 70, 0.38)); }
 @keyframes gb-drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
@@ -526,12 +526,12 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 .chats-btn .gb-hl { position: absolute; left: 18%; top: 16%; width: 34%; height: 18%; border-radius: 50%; background: rgba(255, 255, 255, 0.9); transform: rotate(-35deg); filter: blur(0.3px); }
 .chats-btn .gb-hl2 { position: absolute; right: 18%; bottom: 17%; width: 9%; height: 9%; border-radius: 50%; background: rgba(255, 255, 255, 0.75); }
 /* three dots, pulsing one after another like someone typing */
-.chats-btn .gb-dots { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 4px; padding-top: 4%; }
-.chats-btn .gb-dots i { width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(8, 36, 70, 0.35); animation: gb-dot 1.4s ease-in-out infinite; }
+.chats-btn .gb-dots { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding-top: 4%; }
+.chats-btn .gb-dots i { width: 8px; height: 8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(8, 36, 70, 0.35); animation: gb-dot 1.4s ease-in-out infinite; }
 .chats-btn .gb-dots i:nth-child(2) { animation-delay: 0.18s; } .chats-btn .gb-dots i:nth-child(3) { animation-delay: 0.36s; }
 @keyframes gb-dot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.85; } 30% { transform: translateY(-3px); opacity: 1; } }
 /* tiny bubbles rise from the top right, sway and fade */
-.chats-btn .gb-rise { position: absolute; right: 14px; top: 10px; width: 0; height: 0; pointer-events: none; }
+.chats-btn .gb-rise { position: absolute; right: 16px; top: 12px; width: 0; height: 0; pointer-events: none; }
 .chats-btn .gb-rise i { position: absolute; left: var(--x); top: 0; width: var(--s); height: var(--s); margin: calc(var(--s) / -2); border-radius: 50%;
   border: 1.2px solid rgba(255, 255, 255, 0.9); background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.8) 0 18%, transparent 30%); opacity: 0;
   animation: gb-rise var(--t) ease-out forwards; }
@@ -554,7 +554,7 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 /* battery saver: only the drift (and an occasional rising bubble) */
 .chats-btn.saver .gb-body:not(.boing):not(.reform), .chats-btn.saver .gb-sheen, .chats-btn.saver .gb-shine, .chats-btn.saver .gb-dots i { animation: none; }
 /* the number of new letters: a small coral dot at the top right */
-.chats-btn .badge { position: absolute; right: 4px; top: 8px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center;
+.chats-btn .badge { position: absolute; right: 6px; top: 9px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center;
   background: #ff7a5c; color: #fff; font: 800 11px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(120, 40, 20, 0.35); }
 .chats-btn .badge.pop { animation: badge-bump 0.6s cubic-bezier(.3, 1.8, .5, 1); }
 .chats-btn .badge[hidden] { display: none; }
