@@ -94,6 +94,10 @@ boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera);
 const ambience = new Ambience();
+letter.audio = ambience;                                  // writing sounds, plops, mood music
+seq.planeTarget = () => letter.targetPoint();             // the paper plane flies into the chosen contact's circle
+seq.onSent = kind => letter.caught(kind);                 // …which catches it with a splash
+seq.onSplash = p => { spray.burst(p.x, p.z, ocean.base, 36, 0.9); ambience.plop(5); };   // the bottle hits the sea
 
 const root = document.documentElement;
 const glintColor = new THREE.Color();
@@ -545,10 +549,12 @@ renderer.setAnimationLoop(() => {
   // the avatars' water rings take the sea's colours for the time of day (blended like the sea)
   if ((ringColAt -= dt) <= 0 && letter.visible) {
     ringColAt = 0.25;
+    letter.setLook({ tod: ocean.timeOfDay, rain: W.rain, light: ocean.light });   // stationery + ink follow the time and weather
+    letter.circles.myPrecip = W.rain > 0.3 ? 'rain' : null;                       // my own circle shows my weather
     const U = ocean.uniforms, k = U.uMix.value, rgb = i => { const c = ringTmp.copy(U.uPalA.value[i]).lerp(U.uPalB.value[i], k); return c.getHexString().match(/../g).map(h => parseInt(h, 16)); };
     letter.water.setColors(rgb(4), rgb(3), rgb(1), rgb(5));   // bright, shallow, deep, foam
   }
-  letter.update();
+  letter.update(dt);
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);

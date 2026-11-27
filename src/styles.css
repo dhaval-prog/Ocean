@@ -172,12 +172,103 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   box-sizing: border-box; touch-action: none; cursor: grab; user-select: none;
 }
 .letter[hidden] { display: none; }
-.letter-text {
-  flex: 1; width: 100%; margin: 0; padding: 0; border: 0; outline: none; resize: none; background: transparent;
-  font: 500 calc(var(--u) * 6.6)/1.25 'Caveat', 'Comic Sans MS', cursive; color: #3d4aa3; text-align: center;
-  pointer-events: none; caret-color: #3d4aa3;
+/* the words: an invisible textarea for typing over an "ink" layer that draws
+   every letter in like a pen stroke (the same font, size and wrapping) */
+.ink-wrap { position: relative; flex: 1; width: 100%; min-height: 0; }
+.letter-text, .letter .ink {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; box-sizing: border-box;
+  font: 500 calc(var(--u) * 6.6)/1.25 'Caveat', 'Comic Sans MS', cursive; text-align: center;
+  white-space: pre-wrap; overflow-wrap: break-word; letter-spacing: 0;
 }
-.letter-text::placeholder { color: #4a56b0; opacity: 0.95; }
+.letter-text { outline: none; resize: none; background: transparent; color: transparent; caret-color: var(--ink, #3d4aa3); pointer-events: none; z-index: 2; overflow: hidden; }
+.letter-text::placeholder { color: var(--ink, #4a56b0); opacity: 0.6; }
+.letter .ink { color: var(--ink, #3d4aa3); overflow: hidden; pointer-events: none; z-index: 1; text-shadow: 0 0 6px var(--ink-glow, transparent); }
+.letter .ink .w, .letter .dear .c, .letter .sign .c { display: inline-block; white-space: pre; }
+.letter .ink .c { display: inline-block; transform: rotate(var(--r, 0deg)) translateY(var(--y, 0px)); }
+.letter .c.f { animation: ink-in 0.5s cubic-bezier(.3, .6, .4, 1) both; }
+@keyframes ink-in {
+  0% { clip-path: inset(-40% 100% -40% -40%); opacity: 0.35; filter: blur(0.7px); }
+  55% { opacity: 1; }
+  100% { clip-path: inset(-40% -60% -40% -40%); filter: none; }   /* ends wider than the glyph so slanted strokes aren't cut */
+}
+/* "Dear …," at the top with a flourish, your name signing at the bottom */
+.letter .dear {
+  align-self: flex-start; position: relative; min-height: calc(var(--u) * 9); margin-bottom: calc(var(--u) * 2);
+  font: 600 calc(var(--u) * 7.2)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent);
+}
+.letter .dear .flourish { position: absolute; left: 0; bottom: calc(var(--u) * -1.6); width: 105%; height: calc(var(--u) * 2.6); overflow: visible; }
+.letter .dear .flourish path { fill: none; stroke: var(--ink, #3d4aa3); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 140; stroke-dashoffset: 140; opacity: 0.7;
+  animation: flourish 0.9s ease-out forwards; animation-delay: calc(var(--len, 10) * 55ms + 100ms); }
+@keyframes flourish { to { stroke-dashoffset: 0; } }
+.letter .sign { align-self: flex-end; min-height: calc(var(--u) * 8); margin: calc(var(--u) * 1) calc(var(--u) * 2) calc(var(--u) * 2) 0;
+  font: 600 calc(var(--u) * 6.4)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent); }
+/* tools in the top-right corner of the paper: clear, pen, decorate */
+.letter .tools { position: absolute; z-index: 6; top: calc(var(--u) * 3); right: calc(var(--u) * 3); display: flex; gap: calc(var(--u) * 1.8); }
+.letter .tool {
+  width: max(30px, calc(var(--u) * 9)); height: max(30px, calc(var(--u) * 9)); border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  background: rgba(255, 255, 255, 0.75); color: #3a3350; box-shadow: 0 2px 6px rgba(40, 60, 120, 0.18);
+}
+.letter .tool svg { width: 55%; height: 55%; }
+.letter .tool.on { background: var(--ink, #3d4aa3); color: #fff; }
+.letter.pen-on { cursor: crosshair; }
+/* the decorate tray: paper styles, moods, stickers */
+.letter .tray {
+  position: absolute; z-index: 7; left: calc(var(--u) * 3); right: calc(var(--u) * 3); top: calc(var(--u) * 14);
+  padding: 8px; border-radius: 14px; background: rgba(255, 255, 255, 0.94); color: #2a2433;
+  box-shadow: 0 8px 24px rgba(30, 40, 90, 0.25); animation: tray-in 0.22s ease-out; cursor: default;
+}
+.letter .tray[hidden] { display: none; }
+@keyframes tray-in { from { opacity: 0; transform: translateY(-6px); } }
+.tray-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tray-tabs button { flex: 1; border: 0; border-radius: 8px; padding: 6px 0; font: 600 12px/1 system-ui, sans-serif; background: #eef0f8; color: #3a3350; cursor: pointer; }
+.tray-tabs button.on { background: #3d4aa3; color: #fff; }
+.tray-pane { display: flex; flex-wrap: wrap; gap: 6px; }
+.tray-pane[hidden] { display: none; }
+.tray .chip { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid #e0e3ef; border-radius: 999px; padding: 5px 9px; background: #fff; font: 600 12px/1 system-ui, sans-serif; color: #2a2433; cursor: pointer; }
+.tray .chip.on { border-color: #3d4aa3; background: #eef1ff; }
+.tray .chip .sw, .tray .chip .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.15); }
+.sw-auto { background: conic-gradient(#fde9ec, #fbf9f3, #fdf0d8, #efe9fa, #1d2547, #fde9ec); }
+.sw-parchment { background: radial-gradient(#f6e9cb, #d8bb83); } .sw-waves { background: repeating-linear-gradient(180deg, #fbf8ee 0 3px, #a9c9ee 3px 4px); }
+.sw-starry { background: radial-gradient(circle at 30% 30%, #fff 0 1px, transparent 1.5px), #1d2547; } .sw-sakura { background: radial-gradient(circle at 60% 40%, #f5a3bd 0 3px, transparent 3.5px), #fcebef; }
+.tray .stk-pick { width: 44px; height: 44px; border: 0; border-radius: 10px; background: #f4f6fc; cursor: pointer; display: grid; place-items: center; }
+.tray .stk-pick img { width: 34px; height: 34px; }
+/* doodles, stickers, the photo, the seal */
+.letter .doodle { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.letter .deco { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.letter .stk, .letter .polaroid { position: absolute; pointer-events: auto; cursor: grab; touch-action: none;
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(var(--sc, 1)); transition: opacity 0.2s, filter 0.2s; }
+.letter .stk { width: calc(var(--u) * 13); height: calc(var(--u) * 13); filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2)); }
+.letter .stk.pop, .letter .polaroid.pop { animation: stick-on 0.45s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes stick-on { from { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(0.2); } }
+.letter .stk.leaving, .letter .polaroid.leaving { opacity: 0.35; filter: grayscale(1); }
+.letter .polaroid { width: calc(var(--u) * 36); padding: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 9); background: #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); box-sizing: border-box; }
+.letter .polaroid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.letter .polaroid .clip { position: absolute; left: 50%; top: calc(var(--u) * -6); width: calc(var(--u) * 6); transform: translateX(-50%) rotate(8deg); }
+.letter .seal { position: absolute; left: 50%; top: 80%; width: calc(var(--u) * 15); height: calc(var(--u) * 15); transform: translate(-50%, -50%);
+  animation: seal-stamp 0.55s cubic-bezier(.4, 1.4, .6, 1) both; display: grid; place-items: center; }
+.letter .seal svg { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
+.letter .seal path { fill: var(--seal); } .letter .seal circle { fill: none; stroke: rgba(0, 0, 0, 0.22); stroke-width: 2.5; }
+.letter .seal b { position: relative; font: 700 calc(var(--u) * 5.2)/1 Georgia, serif; color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+@keyframes seal-stamp { 0% { transform: translate(-50%, -50%) scale(2.6) rotate(-20deg); opacity: 0; } 55% { transform: translate(-50%, -50%) scale(0.88); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); } }
+/* the voice note: a wavy ink line across the paper */
+.letter .voice { position: relative; width: 78%; height: calc(var(--u) * 9); margin: calc(var(--u) * 1) 0; }
+.letter .voice[hidden] { display: none; }
+.letter .voice canvas { width: 100%; height: 100%; display: block; }
+.letter .voice.rec canvas { animation: rec-pulse 1s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: 0.6; } }
+.letter .vplay { position: absolute; left: -26px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%); border: 0; border-radius: 50%; background: var(--ink, #3d4aa3); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.letter .voice.rec .vplay { display: none; }
+.letter .vplay svg { width: 60%; height: 60%; }
+.letter-actions button.on { background: #e8674b; color: #fff; }
+/* glowing words: bubbles by day, fireflies at night, drifting up off the line */
+.letter .sparks { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+.letter .sparks .bubble, .letter .sparks .firefly { position: absolute; width: 7px; height: 7px; border-radius: 50%; opacity: 0; animation: word-rise 1.9s ease-out forwards; }
+.letter .sparks .bubble { background: radial-gradient(circle at 35% 35%, #fff 0 20%, rgba(160, 215, 255, 0.35) 45%, rgba(120, 190, 255, 0.75) 72%, transparent 76%); }
+.letter .sparks .firefly { width: 5px; height: 5px; background: #fff3a6; box-shadow: 0 0 8px 3px rgba(255, 230, 120, 0.8); }
+@keyframes word-rise { 0% { opacity: 0; transform: translate(0, 0) scale(0.6); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx, 0), -60px) scale(1.1); } }
+.letter .sparks .drop-splash { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; border: 2px solid var(--ink, #3d4aa3); animation: drop-splash 0.85s ease-out forwards; }
+@keyframes drop-splash { to { transform: scale(9); opacity: 0; border-width: 0.5px; } }
+.letter-toast { position: absolute; z-index: 8; left: 50%; bottom: calc(var(--u) * 24); transform: translateX(-50%); padding: 6px 10px; border-radius: 8px; background: rgba(30, 30, 50, 0.85); color: #fff; font: 600 12px/1.2 system-ui, sans-serif; white-space: nowrap; }
 .letter-actions { display: flex; gap: calc(var(--u) * 4); justify-content: center; }
 .letter-actions button {
   position: relative; width: calc(var(--u) * 16); height: calc(var(--u) * 16); min-width: 40px; min-height: 40px;
@@ -260,15 +351,16 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   85% { opacity: 0.8; }
   100% { opacity: 0; transform: translate(-2px, -72px) scale(1.15); }
 }
-/* on the ocean right now: a green boat sailing on the water ring - bobbing,
-   rocking and nudging forward and back over the waves */
+/* on the ocean right now: a green boat sailing slowly round the water ring
+   (the .orbit turns; the boat itself bobs and rocks over the waves) */
+.person .orbit { position: absolute; inset: -15%; z-index: 3; pointer-events: none; animation: orbit 22s linear infinite; }
+@keyframes orbit { to { transform: rotate(1turn); } }
 .person .online {
-  position: absolute; right: -17px; bottom: -14px; z-index: 3; width: 26px; height: 26px;
-  display: grid; place-items: center; color: #1fa45c; transform-origin: 50% 80%;
+  position: absolute; left: 50%; top: 0; width: 24px; height: 24px; margin: -13px 0 0 -12px;
+  display: grid; place-items: center; color: #1fa45c;
   filter: drop-shadow(0 1px 1px rgba(0, 60, 30, 0.35));
-  animation: boat-sail 2.2s ease-in-out infinite;
 }
-.person .online svg { width: 100%; height: 100%; }
+.person .online svg { width: 100%; height: 100%; transform-origin: 50% 80%; animation: boat-sail 2.2s ease-in-out infinite; }
 @keyframes boat-sail {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
   25% { transform: translate(1.5px, -2.5px) rotate(-9deg); }
@@ -286,8 +378,81 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   0% { transform: scale(1); } 22% { transform: scale(1.17, 0.85); } 45% { transform: scale(0.92, 1.09); }
   68% { transform: scale(1.04, 0.97); } 100% { transform: scale(1); }
 }
+/* --- contact circle extras (Circles.js) ------------------------------------- */
+/* friendship streak: little shells along the left of the ring */
+.person .streak { position: absolute; inset: -17%; z-index: 3; pointer-events: none; }
+.person .streak i { position: absolute; inset: 0; transform: rotate(var(--a)); }
+.person .streak i svg { position: absolute; left: 50%; top: 0; width: 11px; height: 11px; transform: translate(-50%, -50%) rotate(calc(var(--a) * -1)); }
+.person .streak b { position: absolute; left: -6px; top: 70%; font: 800 10px/1 system-ui, sans-serif; color: #7a4a3a; }
+/* status in a bottle, floating in the ring; tap to pop the cork */
+.person .sbottle { position: absolute; z-index: 4; left: -15px; bottom: -6px; width: 22px; height: 22px; padding: 0; border: 0; background: none; cursor: pointer;
+  animation: sbottle-bob 3s ease-in-out infinite; }
+.person .sbottle svg { width: 100%; height: 100%; transform: rotate(-35deg); }
+@keyframes sbottle-bob { 50% { transform: translateY(-3px) rotate(8deg); } }
+.person .sbottle.popped .cork { animation: cork-pop 0.6s ease-out forwards; transform-box: fill-box; }
+@keyframes cork-pop { 30% { transform: translate(2px, -9px) rotate(40deg); } 100% { transform: translate(5px, -16px) rotate(120deg); opacity: 0; } }
+.person .say { position: absolute; z-index: 6; left: 50%; top: calc(100% + 26px); transform: translateX(-50%); width: max-content; max-width: 150px; padding: 6px 9px; border-radius: 10px;
+  background: #fff; color: #2a2433; font: 600 11.5px/1.25 system-ui, sans-serif; box-shadow: 0 4px 14px rgba(20, 40, 90, 0.25); white-space: normal; animation: say-in 0.3s cubic-bezier(.3, 1.5, .5, 1); }
+.person .say::before { content: ''; position: absolute; left: 50%; top: -5px; width: 10px; height: 10px; background: #fff; transform: translateX(-50%) rotate(45deg); }
+@keyframes say-in { from { opacity: 0; transform: translate(-50%, -6px) scale(0.8); } }
+/* at night a paper lantern floats above friends who are online */
+.person .lantern { position: absolute; z-index: 3; left: 50%; top: -46%; width: 15px; height: 20px; margin-left: -7px; opacity: 0; transition: opacity 1.2s;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 90, 0.9)); animation: lantern-float 3.6s ease-in-out infinite; pointer-events: none; }
+.people.night .person .lantern { opacity: 1; }
+@keyframes lantern-float { 50% { transform: translateY(-4px) rotate(4deg); } }
+/* "writing to you…": bubbles rise faster and the ring pulses outward */
+.person .pulse { position: absolute; inset: -14%; border-radius: 50%; border: 2px solid rgba(160, 225, 255, 0.9); opacity: 0; pointer-events: none; z-index: 0; }
+.person.writing .pulse { animation: ring-pulse 1.6s ease-out infinite; }
+.person.writing .pulse.p2 { animation-delay: 0.8s; }
+@keyframes ring-pulse { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.55); } }
+.person.writing .bubbles i { animation-duration: 1.2s !important; }
+.person .city .dots i { animation: dot-blink 1.2s infinite; font-style: normal; }
+.person .city .dots i:nth-child(2) { animation-delay: 0.2s; } .person .city .dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-blink { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
+/* a new letter arrives: a bottle bobs into the ring, the number pops up */
+.person .arrive { position: absolute; z-index: 5; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; animation: arrive 2.4s ease-in-out forwards; pointer-events: none; }
+@keyframes arrive { 0% { transform: translate(0, 60px) rotate(-30deg) scale(0.6); opacity: 0; } 35% { transform: translate(14px, 18px) rotate(15deg); opacity: 1; }
+  55% { transform: translate(18px, 22px) rotate(-10deg); } 75% { transform: translate(20px, 19px) rotate(6deg); opacity: 1; } 100% { transform: translate(22px, 20px) scale(0.4); opacity: 0; } }
+.person .port .badge.unread.bump { animation: badge-bump 0.6s cubic-bezier(.3, 1.8, .5, 1); }
+@keyframes badge-bump { 0% { transform: scale(0); } 60% { transform: scale(1.35); } 100% { transform: scale(1); } }
+/* birthday: fish leap out of the ring; confetti when you pick them */
+.person .leap { position: absolute; z-index: 5; left: 50%; top: 50%; width: 18px; height: 12px; margin: -6px -9px; pointer-events: none; animation: fish-leap 1.5s ease-in-out forwards; }
+@keyframes fish-leap { 0% { transform: translate(calc(var(--side) * -30px), 30px) rotate(calc(var(--side) * -60deg)) scaleX(var(--side)); opacity: 0; }
+  15% { opacity: 1; } 50% { transform: translate(0, -42px) rotate(0deg) scaleX(var(--side)); }
+  100% { transform: translate(calc(var(--side) * 30px), 30px) rotate(calc(var(--side) * 60deg)) scaleX(var(--side)); opacity: 0; } }
+.person .confetti { position: absolute; z-index: 6; left: 50%; top: 40%; width: 6px; height: 9px; border-radius: 1px; pointer-events: none; animation: confetti 1.3s cubic-bezier(.2, .7, .4, 1) forwards; }
+@keyframes confetti { to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
+.person.birthday .name::after { content: ' 🎂'; }
+/* night constellation between the friends you write to most */
+.people .constellation { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 1.5s; z-index: 0; }
+.people.night .constellation { opacity: 1; }
+.people .constellation path { fill: none; stroke: rgba(220, 230, 255, 0.45); stroke-width: 1; stroke-dasharray: 2 4; }
+.people .constellation circle { fill: #fff; animation: twinkle 2.4s ease-in-out infinite; }
+@keyframes twinkle { 50% { opacity: 0.25; } }
+/* long-press peek card */
+.peek { position: absolute; z-index: 30; width: 220px; padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.97); color: #2a2433;
+  box-shadow: 0 10px 30px rgba(20, 30, 80, 0.3); display: flex; flex-direction: column; gap: 5px; font: 500 12.5px/1.35 system-ui, sans-serif;
+  transform-origin: var(--ox, 50%) -20px; animation: peek-in 0.32s cubic-bezier(.3, 1.4, .5, 1); }
+.peek::before { content: ''; position: absolute; left: var(--ox, 50%); top: -6px; width: 12px; height: 12px; margin-left: -6px; background: inherit; transform: rotate(45deg); }
+.peek b { font-size: 14px; } .peek .st { color: #2f7d6a; font-weight: 600; } .peek q { font: 500 16px/1.25 'Caveat', cursive; color: #3d4aa3; }
+.peek small { color: #7a7690; font-size: 11px; }
+@keyframes peek-in { from { opacity: 0; transform: scale(0.4); } }
+/* dragging a contact onto the letter */
+.face.ghost { position: fixed; z-index: 40; margin: 0; transform: translate(-50%, -50%) scale(1.1); pointer-events: none; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3); transition: transform 0.4s, opacity 0.4s; }
+.face.ghost.dropped { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+.face.ghost.back { transform: translate(-50%, -150px) scale(0.5); opacity: 0; }
+/* the circle catches a sent letter with a splash */
+.person .port.catch { animation: port-catch 0.9s cubic-bezier(.3, 1.6, .5, 1); }
+.person .port.catch::after { content: attr(data-caught); background: none; display: grid; place-items: center; font-size: 22px; animation: caught 1.4s ease-out forwards; }
+.person .port.catch .splash { animation: water-splash 0.9s cubic-bezier(.2, .7, .3, 1) 2; inset: -30px; }
+@keyframes port-catch { 0% { transform: scale(1); } 25% { transform: scale(1.3, 0.8); } 50% { transform: scale(0.9, 1.12); } 100% { transform: scale(1); } }
+@keyframes caught { 0% { transform: translateY(10px) scale(0.3); opacity: 0; } 30% { transform: translateY(-4px) scale(1.2); opacity: 1; } 100% { transform: translateY(-26px) scale(1); opacity: 0; } }
+/* the chosen circle splashes bigger; the others go calm */
+.person.selected .splash { inset: -26px; }
+.person:not(.selected) .splash { animation-duration: 6s; }
+.person:not(.selected) .bubbles i { animation-duration: 5.5s; }
 .haptic { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .person .online, .person .port.pop, .person .splash, .person .bubbles i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .person .orbit, .person .online svg, .person .port.pop, .person .splash, .person .bubbles i { animation: none; } }
 .person.selected .face { width: 76px; height: 76px; font-size: 24px; }
 .person .face.bell { background: #8e8a76; color: #fff; }
 .person .face.status { background: #5d5847; color: #fff; }
@@ -311,7 +476,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   .person.selected .face { width: 62px; height: 62px; font-size: 20px; }
   .person .name { font-size: 11px; } .person.selected .name { font-size: 13px; }
   .person .city { font-size: 10px; }
-  .person .online { width: 22px; height: 22px; right: -15px; bottom: -12px; }
+  .person .online { width: 20px; height: 20px; margin: -11px 0 0 -10px; }
   .person .port .badge.unread { top: -13px; right: -13px; }
   .person .port { margin: 13px 0 11px; }
 }

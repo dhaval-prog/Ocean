@@ -45,7 +45,9 @@ export class WaterRings {
       const cv = document.createElement('canvas');
       cv.className = 'water'; cv.setAttribute('aria-hidden', 'true');
       port.prepend(cv);
-      return { port, cv, ctx: cv.getContext('2d'), w: waves(i * 7.31 + 3.7), size: 0, t0: Math.random() * 50 };
+      // per ring: its own clock (speed), how lively the water is (calm), a koi,
+      // rain / snow inside (precip) and its own colours (col, else the sea's)
+      return { port, cv, ctx: cv.getContext('2d'), w: waves(i * 7.31 + 3.7), size: 0, t: Math.random() * 50, speed: 1, calm: 1, koi: false, precip: null, col: null, drops: [] };
     });
   }
 
@@ -53,8 +55,10 @@ export class WaterRings {
   setColors(hi, mid, deep, foam) { Object.assign(this.col, { hi, mid, deep, foam }); }
 
   draw(now = performance.now()) {
-    const t = this.reduce ? 0 : now / 1000, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dt = this._last ? Math.min(0.1, (now - this._last) / 1000) : 0; this._last = now;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     for (const it of this.items) {
+      if (!this.reduce) it.t += dt * it.speed;
       const face = it.port.offsetWidth;
       if (!face) continue;
       const pad = Math.round(face * 0.34), size = face + pad * 2;
@@ -63,16 +67,16 @@ export class WaterRings {
         it.cv.width = Math.round(size * dpr); it.cv.height = Math.round(size * dpr);
         Object.assign(it.cv.style, { width: size + 'px', height: size + 'px', left: -pad + 'px', top: -pad + 'px' });
       }
-      this._ring(it, face / 2, size, t + it.t0, dpr);
+      this._ring(it, face / 2, size, it.t, dpr, dt);
     }
   }
 
-  _ring(it, faceR, size, t, dpr) {
-    const g = it.ctx, c = size / 2, w = it.w;
+  _ring(it, faceR, size, t, dpr, dt) {
+    const g = it.ctx, c = size / 2, w = it.w, col = it.col || this.col;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
     const thick = Math.max(3.4, faceR * 0.17), mid = faceR + faceR * 0.22 + thick / 2;   // a gap of sea between picture and water
-    const A = Math.max(1.1, faceR * 0.06), N = 120;
+    const A = Math.max(1.1, faceR * 0.06) * it.calm, N = 120;
     const outer = [], inner = [], crest = [];
     for (let i = 0; i <= N; i++) {
       const a = (i / N) * TAU;
@@ -85,9 +89,9 @@ export class WaterRings {
     }
     // the body of water: light where it faces the sun (upper left), deeper blue elsewhere
     const lg = g.createLinearGradient(c - mid, c - mid, c + mid, c + mid);
-    lg.addColorStop(0, rgba(this.col.hi, 0.95));
-    lg.addColorStop(0.45, rgba(this.col.mid, 0.88));
-    lg.addColorStop(1, rgba(this.col.deep, 0.92));
+    lg.addColorStop(0, rgba(col.hi, 0.95));
+    lg.addColorStop(0.45, rgba(col.mid, 0.88));
+    lg.addColorStop(1, rgba(col.deep, 0.92));
     g.beginPath();
     outer.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     g.closePath();
@@ -102,20 +106,51 @@ export class WaterRings {
     for (let i = 0; i < N; i++) {
       const f = Math.min(1, Math.max(0, (crest[i] - 0.15) / 0.9));
       if (f <= 0.02) continue;
-      g.strokeStyle = rgba(this.col.foam, (0.25 + 0.7 * f).toFixed(3));
+      g.strokeStyle = rgba(col.foam, (0.25 + 0.7 * f).toFixed(3));
       g.lineWidth = 0.8 + f * 1.4;
       g.beginPath(); g.moveTo(outer[i][0], outer[i][1]); g.lineTo(outer[i + 1][0], outer[i + 1][1]); g.stroke();
     }
     // a thin bright line on the inner edge
-    g.strokeStyle = rgba(this.col.foam, 0.45); g.lineWidth = 0.8;
+    g.strokeStyle = rgba(col.foam, 0.45); g.lineWidth = 0.8;
     g.beginPath(); inner.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
     // glints drifting along the water at different speeds
     for (let k = 0; k < 3; k++) {
       const a0 = ((t * (0.18 + k * 0.07) * (k % 2 ? -1 : 1) + k * 2.1) % TAU + TAU) % TAU;
       const span = 0.18 + 0.1 * Math.sin(t * 0.7 + k);
-      g.strokeStyle = rgba(this.col.foam, (0.55 + 0.35 * Math.sin(t * 1.3 + k * 1.7)).toFixed(3));
+      g.strokeStyle = rgba(col.foam, (0.55 + 0.35 * Math.sin(t * 1.3 + k * 1.7)).toFixed(3));
       g.lineWidth = 1.3;
       g.beginPath(); g.arc(c, c, mid + Math.sin(t + k) * thick * 0.2, a0, a0 + span); g.stroke();
     }
+    if (it.koi) this._koi(g, c, faceR * 1.11, t);
+    if (it.precip) this._precip(it, g, c, faceR, dt);
+  }
+
+  /** A little koi swimming laps in the gap between the picture and the water. */
+  _koi(g, c, r, t) {
+    const a = t * 0.9, x = c + r * Math.cos(a), y = c + r * Math.sin(a), s = Math.max(3.2, r * 0.13);
+    g.save(); g.translate(x, y); g.rotate(a + Math.PI / 2);                  // facing along its path
+    const wag = Math.sin(t * 9) * 0.35;
+    g.fillStyle = '#ff8a3d'; g.strokeStyle = 'rgba(80, 30, 10, 0.55)'; g.lineWidth = 0.7;
+    g.beginPath(); g.ellipse(0, 0, s * 0.42, s, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = '#fff3e8'; g.beginPath(); g.ellipse(0, s * 0.15, s * 0.22, s * 0.38, 0, 0, Math.PI * 2); g.fill();   // white patch
+    g.save(); g.translate(0, -s * 0.95); g.rotate(wag);                       // tail fin, wagging
+    g.fillStyle = '#ff8a3d'; g.beginPath(); g.moveTo(0, 0); g.lineTo(-s * 0.5, -s * 0.7); g.lineTo(s * 0.5, -s * 0.7); g.closePath(); g.fill(); g.restore();
+    g.fillStyle = '#2a1a12'; g.beginPath(); g.arc(-s * 0.18, s * 0.62, s * 0.08, 0, Math.PI * 2); g.arc(s * 0.18, s * 0.62, s * 0.08, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+
+  /** Rain or snow falling inside the circle (their weather). */
+  _precip(it, g, c, faceR, dt) {
+    const snow = it.precip === 'snow', D = it.drops;
+    while (D.length < (snow ? 14 : 18)) D.push({ x: (Math.random() * 2 - 1) * faceR * 0.85, y: -faceR - Math.random() * faceR * 2, v: snow ? 6 + Math.random() * 6 : 38 + Math.random() * 20 });
+    g.save(); g.beginPath(); g.arc(c, c, faceR * 0.98, 0, Math.PI * 2); g.clip();
+    g.strokeStyle = 'rgba(220, 236, 255, 0.85)'; g.fillStyle = 'rgba(255, 255, 255, 0.95)'; g.lineWidth = 1.1; g.lineCap = 'round';
+    for (const d of D) {
+      d.y += d.v * dt; if (snow) d.x += Math.sin(d.y * 0.2) * 0.15;
+      if (d.y > faceR) { d.y = -faceR - Math.random() * 10; d.x = (Math.random() * 2 - 1) * faceR * 0.85; }
+      if (snow) { g.beginPath(); g.arc(c + d.x, c + d.y, 1.3, 0, Math.PI * 2); g.fill(); }
+      else { g.beginPath(); g.moveTo(c + d.x, c + d.y); g.lineTo(c + d.x - 1, c + d.y + 4.5); g.stroke(); }
+    }
+    g.restore();
   }
 }

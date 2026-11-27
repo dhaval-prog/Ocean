@@ -1,21 +1,23 @@
 import * as THREE from 'three';
+import { paintPaper } from '../social/Stationery.js';
 
 // Click the boat → it sinks → a wet sheet of paper flutters up out of the
 // water like a leaf on the wind (dripping, drying as it rises), hovers in front
-// of you with a little bounce and settles onto the screen. Drag and flick the paper up or down (or press Esc)
-// and it sails back into the sea, and the boat bobs back up.
+// of you with a little bounce and settles onto the screen, breathing with the
+// waves. Sending (flick up / down, or Esc): a wax seal stamps on, then it
+// folds into a paper plane that flies to the chosen contact's circle (up) or
+// rolls into a bottle that drops into the sea (down); the boat bobs back up.
 // Adapted from the "sink → paper → catch → throw → re-form" sequence in the
 // Tugboat.html prototype.
 
 const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 // tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
-const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, thrown: 1.3, reform: 2.2 };
+const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, seal: 0.8, fold: 0.7, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 const backOut = k => { const c = 1.6; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
-const tumbleQ = t => new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + t * 3.4, t * 1.9 + Math.sin(t * 2.6) * 0.9, Math.sin(t * 2.1) * 1.3));
 
 export class SinkSequence {
   /**
@@ -26,6 +28,9 @@ export class SinkSequence {
     Object.assign(this, { scene, camera, dom, boat, ocean, onChange, getWind, onDrip });
     this._dripAt = 0;
     this.mode = 'idle';
+    // what the paper looks like (set by the letter: stationery, time, weather, mood) and sticker images
+    this.look = { style: 'auto', tod: 1, rain: 0, mood: 'none' };
+    this.images = {};
     this.t0 = 0;
 
     this.geo = new THREE.PlaneGeometry(PW, PH, 18, 24);
@@ -66,6 +71,11 @@ export class SinkSequence {
     this.paper.frustumCulled = false;
     scene.add(this.paper);
 
+    this.lift = { u: 0.8, v: -0.6, amt: 0 };             // the corner near the typing lifts a little (amt decays)
+    this.planeTarget = null;                             // () => {x, y} screen point of the chosen contact's circle
+    this.onSent = null;                                  // (kind) → the letter arrived (circle catches it)
+    this.sendKind = 'plane';
+    this._buildBottle(scene);
     this._ray = new THREE.Raycaster();
     this._vel = new V3();
     this._held = null;
@@ -75,10 +85,9 @@ export class SinkSequence {
 
   get active() { return this.mode !== 'idle'; }
 
-  /** Redraw the paper: grain, plus optional handwriting (so the words fly away with it). */
-  paint(text = '', font = 'Caveat') {
+  /** Redraw the paper: the stationery for `this.look`, plus (when sending) the whole letter `comp`. */
+  paint(comp = null) {
     const cv = this.canvas, g = cv.getContext('2d'), w = cv.width, h = cv.height;
-    g.fillStyle = '#fbf9f3'; g.fillRect(0, 0, w, h);
     if (!this._grain) {                                  // faint speckled paper fibres, made once
       const gc = document.createElement('canvas'); gc.width = w; gc.height = h;
       const gg = gc.getContext('2d'), img = gg.createImageData(w, h);
@@ -87,23 +96,9 @@ export class SinkSequence {
       gg.putImageData(img, 0, 0);
       this._grain = gc;
     }
-    g.drawImage(this._grain, 0, 0);
-    if (text) {
-      const size = w * 0.066;
-      g.fillStyle = '#3d4aa3'; g.textAlign = 'center'; g.textBaseline = 'top';
-      g.font = `500 ${size}px "${font}", "Comic Sans MS", cursive`;
-      const maxW = w * 0.82, lines = [];
-      for (const para of text.split('\n')) {
-        let line = '';
-        for (const word of para.split(' ')) {
-          const test = line ? line + ' ' + word : word;
-          if (g.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
-        }
-        lines.push(line);
-      }
-      lines.slice(0, 12).forEach((l, i) => g.fillText(l, w / 2, h * 0.12 + i * size * 1.25));
-    }
+    const P = paintPaper(g, w, h, this.look, this._grain, comp, this.images);
     this.tex.needsUpdate = true;
+    return P;
   }
 
   /** Screen rectangle (CSS px) the paper covers, from its four corners. */
@@ -136,24 +131,26 @@ export class SinkSequence {
     if (this.mode !== 'idle' || !this.boat.ready) return;
     this.boat.frozen = true;
     this._now = performance.now();                       // the clock starts at the tap itself
+    this._flatten(); this.bottle.visible = false;
     this.spot = new V3(this.boat.position.x, this.ocean.base, this.boat.position.y);
     this._lastRip = -1;
     this.setMode('sink');
   }
 
   /** Throw the paper back (button), with a default toss away from the camera. */
-  throwBack() {
+  throwBack() { this.send('plane'); }
+
+  /** Send the letter: 'plane' (flies to the contact's circle) or 'bottle' (drops into the sea). Starts with the wax seal. */
+  send(kind = 'plane') {
     if (this.mode !== 'card' && this.mode !== 'held') return;
-    const fwd = new V3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    this._startThrow(fwd.multiplyScalar(7).add(new V3(0, 2, 0)));
+    this.sendKind = kind;
+    this._fromP = this.paper.position.clone(); this._fromQ = this.paper.quaternion.clone();
+    this.dom.style.cursor = '';
+    this.setMode('seal');
   }
 
   /** Send the paper into the sea in a screen direction (sx, sy: −1 … 1, y down) at `speed`. */
-  flick(sx, sy, speed = 9) {
-    if (this.mode !== 'card' && this.mode !== 'held') return;
-    const right = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
-    this._startThrow(right.multiplyScalar(sx * speed).addScaledVector(up, -sy * speed));
-  }
+  flick(sx, sy) { this.send(sy < 0 ? 'plane' : 'bottle'); }   // up: paper plane, down: bottle
 
   _cardTarget() {
     // sits below the avatar row: ~58% of the height, centred well below the middle
@@ -195,12 +192,69 @@ export class SinkSequence {
     }
   }
 
-  _startThrow(v) {
-    const p0 = this.paper.position.clone(), end = this.spot.clone().setY(this.ocean.base - 0.2);
-    this._curve = new THREE.QuadraticBezierCurve3(p0, p0.clone().addScaledVector(v, 0.45).add(new V3(0, 1.6, 0)), end);
-    this._fromQ = this.paper.quaternion.clone();
-    this.dom.style.cursor = '';
-    this.setMode('thrown');
+  _glass() { return this.bottle.children[0].material; }
+
+  /** The letter is on its way: put the paper away and bring the boat back up. */
+  _arrive() {
+    const P = this.paper;
+    P.visible = false; this._flatten();
+    this.ocean.addRipple(this.spot.x, this.spot.z, 1);
+    this.boat.group.visible = true;
+    this._lastRip = -1;
+    this.setMode('reform');
+  }
+
+  /** Card pose bend: a faint ripple across the sheet plus the lifted corner near the typing. */
+  _bendCard(t) {
+    const a = this.geo.attributes.position, b = this.base, L = this.lift;
+    const cx = Math.sign(L.u || 1) * PW / 2, cy = Math.sign(L.v || -1) * PH / 2;
+    for (let i = 0; i < a.count; i++) {
+      const x = b[i * 3], y = b[i * 3 + 1];
+      const wave = 0.02 * (0.22 * Math.sin(x * 2.6 + t * 2) + 0.16 * Math.sin(y * 2.1 - t * 1.6 + x));
+      const d = Math.hypot(x - cx, y - cy), c = Math.max(0, 1 - d / 0.9);
+      a.setZ(i, wave + L.amt * 0.16 * c * c);
+    }
+    a.needsUpdate = true;
+  }
+
+  /** Morph the sheet: 0 = flat paper, 1 = folded into a paper plane (kind 'plane') or rolled into a scroll ('bottle'). */
+  _shape(kind, k) {
+    const a = this.geo.attributes.position, b = this.base;
+    for (let i = 0; i < a.count; i++) {
+      const x = b[i * 3], y = b[i * 3 + 1], u = x / (PW / 2), v = (y + PH / 2) / PH;   // u −1…1 across, v 0 (tail) … 1 (nose / top)
+      let tx, ty, tz;
+      if (kind === 'plane') {
+        const span = (PW / 2) * (1 - v) * 0.95 + 0.03, au = Math.abs(u);
+        if (au > 0.2) { tx = Math.sign(u) * (0.04 + (au - 0.2) / 0.8 * span); tz = (au - 0.2) * 0.12; }   // wings, slight dihedral
+        else { tx = u * 0.18; tz = -(0.2 - au) / 0.2 * 0.26 * (1 - v * 0.7); }                           // the keel folded down
+        ty = y * 0.8;
+      } else {
+        const th = u * Math.PI * 1.3, r = 0.19;                                                          // rolled up into a scroll
+        tx = r * Math.sin(th); tz = r * (1 - Math.cos(th)) - r; ty = y * 0.42;
+      }
+      a.setXYZ(i, x + (tx - x) * k, y + (ty - y) * k, (tz) * k);
+    }
+    a.needsUpdate = true;
+  }
+
+  _flatten() { this.geo.attributes.position.array.set(this.base); this.geo.attributes.position.needsUpdate = true; this.paper.scale.setScalar(1); }
+
+  _buildBottle(scene) {
+    // a little glass bottle with a cork, slipped round the rolled-up letter
+    const prof = [[0, -0.56], [0.3, -0.55], [0.33, -0.48], [0.33, 0.26], [0.3, 0.36], [0.15, 0.48], [0.12, 0.58], [0.14, 0.62], [0.12, 0.66]].map(([x, y]) => new THREE.Vector2(x, y));
+    const glass = new THREE.Mesh(new THREE.LatheGeometry(prof, 28), new THREE.MeshStandardMaterial({ color: '#bfe7ea', transparent: true, opacity: 0.38, roughness: 0.08, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide }));
+    const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.14, 16), new THREE.MeshStandardMaterial({ color: '#b07a45', roughness: 0.9 }));
+    cork.position.y = 0.7;
+    this.bottle = new THREE.Group(); this.bottle.add(glass, cork);
+    this.bottle.visible = false; this.bottle.renderOrder = 51; glass.renderOrder = 51;
+    scene.add(this.bottle);
+  }
+
+  /** World point just in front of the camera under a screen point (for the plane to fly into a contact's circle). */
+  _screenToWorld(sx, sy, dist) {
+    const r = this.dom.getBoundingClientRect();
+    this._ray.setFromCamera(new THREE.Vector2(((sx - r.left) / r.width) * 2 - 1, -((sy - r.top) / r.height) * 2 + 1), this.camera);
+    return this._ray.ray.at(dist, new V3());
   }
 
   update(dt, now) {
@@ -272,11 +326,18 @@ export class SinkSequence {
       this._bend(t, 0.25 * Math.exp(-t * 4) + 0.02);
       this.wet.value = 0.25 * (1 - k);                                  // the last damp edges dry off
       if (k >= 1) { this.wet.value = 0; this.setMode('card', this.t0 + DUR.hover * 1000); }
-    } else if (this.mode === 'card') {
-      const tg = this._cardTarget();
-      P.position.copy(tg.p).add(new V3(0, Math.sin(t * 1.6) * 0.03, 0).applyQuaternion(tg.q));
-      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(t * 1.3) * 0.03, Math.sin(t * 0.9) * 0.04, 0)));
-      this._bend(t, 0.02);
+    } else if (this.mode === 'card' || this.mode === 'seal') {
+      // the paper breathes: it rises and falls gently with the waves under it, and
+      // the corner nearest where you're typing lifts a little
+      const tg = this._cardTarget(), sw = Math.sin(t * 1.1), sw2 = Math.sin(t * 0.7 + 1);
+      P.position.copy(tg.p).add(new V3(Math.sin(t * 0.5) * 0.02, sw * 0.055 + sw2 * 0.02, 0).applyQuaternion(tg.q));
+      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.035, Math.sin(t * 0.9) * 0.04, Math.sin(t * 0.6) * 0.015)));
+      this.lift.amt *= Math.exp(-dt * 1.6);
+      this._bendCard(t);
+      if (this.mode === 'seal' && t >= DUR.seal) {           // the seal is on: fold it up
+        this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
+        this.setMode('fold', this.t0 + DUR.seal * 1000);
+      }
     } else if (this.mode === 'held') {
       const tg = this._cardTarget(), before = P.position.clone();
       P.position.lerp(this._held, 1 - Math.exp(-18 * dt));
@@ -284,18 +345,57 @@ export class SinkSequence {
       const local = this._vel.clone().applyQuaternion(tg.q.clone().invert());
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-local.y * 0.05, local.x * 0.05, -local.x * 0.03)));
       this._bend(t, Math.min(0.5, this._vel.length() * 0.04));
-    } else if (this.mode === 'thrown') {
-      const k = Math.min(1, t / DUR.thrown);
-      P.position.copy(this._curve.getPoint(k * k * (1.2 - 0.2 * k)));
-      P.quaternion.slerpQuaternions(this._fromQ, tumbleQ(t * 1.6), Math.min(1, k * 3));
-      this._bend(t, 0.9);
-      if (k >= 1) {
-        P.visible = false;
-        this.ocean.addRipple(this.spot.x, this.spot.z, 1);
-        B.group.visible = true;
-        this._lastRip = -1;
-        this.setMode('reform');
+    } else if (this.mode === 'fold') {
+      // fold into a paper plane, or roll up into a scroll
+      const k = ease(Math.min(1, t / DUR.fold)), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      this._shape(this.sendKind, k);
+      P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : -0.15) * k);
+      P.quaternion.copy(this._fromQ);
+      if (t >= DUR.fold) {
+        this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
+        if (this.sendKind === 'bottle') { this.bottle.visible = true; this.bottle.scale.setScalar(0.01); this._glass().opacity = 0.38; }
+        this.setMode(this.sendKind, this.t0 + DUR.fold * 1000);
       }
+    } else if (this.mode === 'plane') {
+      // the paper plane flies up into the chosen contact's circle at the top of the screen
+      const k = Math.min(1, t / DUR.plane), e = k * k * (3 - 2 * k);
+      if (!this._planeEnd) {
+        const tgt = this.planeTarget?.() || { x: this.dom.clientWidth / 2, y: 60 };
+        this._planeEnd = this._screenToWorld(tgt.x, tgt.y, this._cardTarget().D * 0.6);
+        const cu = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion), cr = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        this._planeMid = this._fromP.clone().lerp(this._planeEnd, 0.5).addScaledVector(cu, 0.6).addScaledVector(cr, 0.9);
+      }
+      const a = this._fromP, m = this._planeMid, z = this._planeEnd;
+      const pos = new V3().copy(a).multiplyScalar((1 - e) * (1 - e)).addScaledVector(m, 2 * (1 - e) * e).addScaledVector(z, e * e);
+      const fwd = new V3().copy(m).sub(a).multiplyScalar(2 * (1 - e)).addScaledVector(new V3().copy(z).sub(m), 2 * e).normalize();
+      const toCam = new V3().subVectors(this.camera.position, pos).normalize();          // its top faces you, wings spread
+      const right = new V3().crossVectors(fwd, toCam).normalize(), top = new V3().crossVectors(right, fwd);
+      P.position.copy(pos);
+      P.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, fwd, top))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(0, 1, 0), Math.sin(k * Math.PI * 2) * 0.45));   // banks as it swoops
+      P.scale.setScalar(1 - 0.72 * e);
+      if (k >= 1) { this._planeEnd = null; this.onSent?.('plane'); this._arrive(); }
+    } else if (this.mode === 'bottle') {
+      // a glass bottle closes round the scroll, drops into the sea, bobs and sinks away
+      const k = Math.min(1, t / DUR.bottle), Bt = this.bottle, s = this.spot;
+      const water = this.ocean.base;
+      const side = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));   // lying on its side on the water
+      if (k < 0.15) {
+        Bt.scale.setScalar(Math.max(0.01, backOut(k / 0.15)));
+        P.position.copy(this._fromP);
+      } else if (k < 0.55) {
+        const f = (k - 0.15) / 0.4, end = s.clone().setY(water + 0.15);
+        P.position.lerpVectors(this._fromP, end, f).add(new V3(0, Math.sin(f * Math.PI) * 0.8, 0));
+        P.quaternion.slerpQuaternions(this._fromQ, side, f);
+        if (!this._splashed && f > 0.97) { this._splashed = true; this.ocean.addRipple(s.x, s.z, 1); this.onSplash?.(end); }
+      } else {
+        const f = (k - 0.55) / 0.45;
+        P.position.copy(s).setY(water + 0.15 + Math.sin(f * 9) * 0.06 * (1 - f) - Math.max(0, f - 0.55) * 1.4);
+        P.quaternion.copy(side).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(f * 7) * 0.15, 0, Math.sin(f * 5) * 0.1)));
+        if (f > 0.55) this._glass().opacity = 0.38 * (1 - (f - 0.55) / 0.45);
+      }
+      Bt.position.copy(P.position); Bt.quaternion.copy(P.quaternion);
+      if (k >= 1) { this._splashed = false; Bt.visible = false; this.onSent?.('bottle'); this._arrive(); }
     } else if (this.mode === 'reform') {
       const k = Math.min(1, t / DUR.reform), b = backOut(k);
       B.sinkY = -2.2 * (1 - b);
@@ -358,9 +458,7 @@ export class SinkSequence {
         // screen direction → world, using the camera's right / up
         let sx = fast ? vx : end.x - first.x, sy = fast ? vy : end.y - first.y;
         const len = Math.hypot(sx, sy) || 1; sx /= len; sy /= len;
-        const right = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
-        const speed = THREE.MathUtils.clamp(Math.hypot(vx, vy) / size * 4, 5, 14);
-        this._startThrow(right.multiplyScalar(sx * speed).addScaledVector(up, -sy * speed));
+        this.send(sy < 0 ? 'plane' : 'bottle');                             // up: paper plane, down: bottle
       } else this.setMode('card');                                          // not flicked: settle back
     };
     window.addEventListener('pointerup', up, { capture: true });
