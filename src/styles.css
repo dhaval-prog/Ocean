@@ -194,7 +194,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 
 /* --- people row at the top (you in the middle, friends to the right) ------ */
 .people {
-  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(156px + var(--safe-t)); padding-top: calc(10px + var(--safe-t));
+  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(176px + var(--safe-t)); padding-top: calc(28px + var(--safe-t));   /* clear of the status bar */
   overflow: hidden; touch-action: none;
   background: linear-gradient(to bottom, var(--card) 0%, transparent 100%);
 }
@@ -222,14 +222,8 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .person .face img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }   /* the photo covers the initials */
 .person .face .initials { position: relative; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
 .person .face > svg { position: relative; z-index: 1; }
-/* the rippling ring of water */
-.person .port::before {
-  content: ''; position: absolute; inset: -11px; z-index: 1; pointer-events: none;   /* a clear gap of sea between the picture and the water */
-  background: url('/water/ring.svg') center / 100% 100% no-repeat;
-  filter: drop-shadow(0 1px 2px rgba(20, 80, 140, 0.35));
-  animation: water-turn 24s linear infinite; animation-delay: calc(var(--d, 0s) * -5);   /* slow, steady, one way */
-}
-@keyframes water-turn { to { transform: rotate(1turn); } }
+/* the ring of water: drawn live on a canvas (src/social/WaterRing.js) */
+.person .port canvas.water { position: absolute; z-index: 1; pointer-events: none; }
 /* a soft wet highlight on top */
 .person .port::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 2; pointer-events: none;
@@ -266,23 +260,17 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   85% { opacity: 0.8; }
   100% { opacity: 0; transform: translate(-2px, -72px) scale(1.15); }
 }
-/* unread letters: a rainbow ring outside the water that slowly turns, fading once read */
-.person .ring {
-  position: absolute; inset: -16px; border-radius: 50%; z-index: 0; pointer-events: none;
-  background: conic-gradient(#ff7a59, #ffc94a, #5ed39b, #4aa8ff, #b27bff, #ff7a59);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
-  animation: ring-turn 4s linear infinite; transition: opacity 1.2s ease;
-}
-.person .ring.read { opacity: 0; }
-@keyframes ring-turn { to { transform: rotate(1turn); } }
-/* on the ocean right now: a little boat bobbing on the avatar */
+/* on the ocean right now: a little black boat bobbing on the water ring */
 .person .online {
-  position: absolute; right: -12px; bottom: -10px; z-index: 3; width: 20px; height: 20px; border-radius: 50%;
-  display: grid; place-items: center; background: #fff; color: #2f6fb5; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
-  animation: boat-bob 2.4s ease-in-out infinite;
+  position: absolute; right: -13px; bottom: -11px; z-index: 3; width: 18px; height: 18px;
+  display: grid; place-items: center; color: #111; animation: boat-bob 2.4s ease-in-out infinite;
 }
-.person .online svg { width: 72%; height: 72%; }
+.person .online svg { width: 100%; height: 100%; }
+/* unread letters: the number at the top right of the water circle; fades once read */
+.person .port .badge.unread {
+  top: -15px; right: -15px; z-index: 4; transition: opacity 1.2s ease, transform 1.2s ease;
+}
+.person .port .badge.unread.read { opacity: 0; transform: scale(0.6); }
 @keyframes boat-bob { 50% { transform: translateY(-2px) rotate(-6deg); } }
 /* picking someone: squash & stretch */
 .person .port.pop { animation: port-pop 0.55s cubic-bezier(.3, .7, .4, 1); }
@@ -291,7 +279,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   68% { transform: scale(1.04, 0.97); } 100% { transform: scale(1); }
 }
 .haptic { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .person .ring, .person .online, .person .port.pop, .person .port::before, .person .splash, .person .bubbles i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .person .online, .person .port.pop, .person .splash, .person .bubbles i { animation: none; } }
 .person.selected .face { width: 68px; height: 68px; font-size: 22px; }
 .person .face.bell { background: #8e8a76; color: #fff; }
 .person .face.status { background: #5d5847; color: #fff; }
@@ -308,14 +296,15 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .person.selected .name { font-size: 14px; font-weight: 700; }
 .person .city { font-size: 11px; opacity: 0.7; }
 @media (max-width: 640px) {
-  .people { height: calc(136px + var(--safe-t)); }
+  .people { height: calc(154px + var(--safe-t)); padding-top: calc(26px + var(--safe-t)); }
   .people-track { gap: 10px; }
   .person { width: 74px; }
   .person .face { width: 44px; height: 44px; font-size: 15px; }
   .person.selected .face { width: 54px; height: 54px; font-size: 18px; }
   .person .name { font-size: 11px; } .person.selected .name { font-size: 13px; }
   .person .city { font-size: 10px; }
-  .person .online { width: 17px; height: 17px; right: -11px; bottom: -9px; }
+  .person .online { width: 16px; height: 16px; right: -12px; bottom: -10px; }
+  .person .port .badge.unread { top: -13px; right: -13px; }
   .person .port { margin: 13px 0 11px; }
 }
 

@@ -146,10 +146,10 @@ export class SinkSequence {
   }
 
   _cardTarget() {
-    // fits below the avatar row at the top: ~60% of the height, centred a little low
+    // sits below the avatar row: ~58% of the height, centred well below the middle
     const c = this.camera, tf = Math.tan(THREE.MathUtils.degToRad(c.fov) / 2);
-    const D = Math.max(PH / (2 * tf * 0.6), PW / (2 * tf * c.aspect * 0.86));
-    const down = 2 * D * tf * 0.075;
+    const D = Math.max(PH / (2 * tf * 0.58), PW / (2 * tf * c.aspect * 0.86));
+    const down = 2 * D * tf * 0.115;
     const p = new V3(0, -down, -D).applyQuaternion(c.quaternion).add(c.position);
     return { p, q: c.quaternion.clone(), D };
   }

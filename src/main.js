@@ -498,7 +498,8 @@ const quality = new AutoQuality({
 // --- loop -----------------------------------------------------------------------
 const timer = new THREE.Timer();
 timer.connect(document); // pauses cleanly while the tab is hidden
-let elapsed = 0, glowTimer = 0, dropTimer = 1, wxSyncAt = 0;
+let elapsed = 0, glowTimer = 0, dropTimer = 1, wxSyncAt = 0, ringColAt = 0;
+const ringTmp = new THREE.Color();
 const lookWx = { glints: 0, petals: 0, specks: 0 }, windVec = [0, 0], bowPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   timer.update();
@@ -541,6 +542,12 @@ renderer.setAnimationLoop(() => {
   controls.update(dt);
   ocean.update(dt, elapsed);
   seq.update(dt, performance.now());
+  // the avatars' water rings take the sea's colours for the time of day (blended like the sea)
+  if ((ringColAt -= dt) <= 0 && letter.visible) {
+    ringColAt = 0.25;
+    const U = ocean.uniforms, k = U.uMix.value, rgb = i => { const c = ringTmp.copy(U.uPalA.value[i]).lerp(U.uPalB.value[i], k); return c.getHexString().match(/../g).map(h => parseInt(h, 16)); };
+    letter.water.setColors(rgb(4), rgb(3), rgb(1), rgb(5));   // bright, shallow, deep, foam
+  }
   letter.update();
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived
