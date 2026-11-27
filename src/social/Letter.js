@@ -64,18 +64,23 @@ export class Letter {
     this.row = document.createElement('div');
     this.row.className = 'people';
     this.row.hidden = true;
-    // each avatar is a porthole: brass rim + glass glare round a photo (or the
-    // coloured initials); unread letters = a turning rainbow ring; online = a little boat
+    // each avatar sits in a circle of water: a rippling water ring, droplets that
+    // splash out from it now and then and bubbles rising inside, round a photo (or
+    // the coloured initials); unread letters = a turning rainbow ring; online = a little boat
+    const bubbles = '<span class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
+    const water = k => `style="--d:${((k * 0.83) % 2.6).toFixed(2)}s"`;   // each avatar splashes on its own beat
     const avatar = (p, i) => {
       const who = p.id === 'me' ? 'yourself' : p.name;
       const extra = [p.unread ? `${p.unread} unread` : '', p.online ? 'on the ocean now' : ''].filter(Boolean).join(', ');
       return `
       <button type="button" class="person" data-i="${i}" aria-label="Write to ${esc(who)}${extra ? ` (${esc(extra)})` : ''}">
-        <span class="port">
+        <span class="port" ${water(i + 2)}>
           ${p.unread ? '<span class="ring" aria-hidden="true"></span>' : ''}
+          <span class="splash" aria-hidden="true"></span>
           <span class="face" style="--c:${p.color}">
             <span class="initials">${esc(p.initials)}</span>
             ${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+            ${bubbles}
           </span>
           ${p.online ? `<span class="online" title="On the ocean now">${ICONS.boat}</span>` : ''}
         </span>
@@ -84,8 +89,8 @@ export class Letter {
     };
     this.row.innerHTML = `
       <div class="people-track">
-        <div class="person extra"><span class="port"><span class="face bell">${ICONS.bell}</span><span class="badge warm">${NOTIFICATIONS > 9 ? '9+' : NOTIFICATIONS}</span></span><span class="name">Notifications</span></div>
-        <div class="person extra"><span class="port"><span class="face status">${ICONS.person}</span><span class="plus">+</span></span><span class="name">Add Status</span></div>
+        <div class="person extra"><span class="port" ${water(0)}><span class="splash" aria-hidden="true"></span><span class="face bell">${ICONS.bell}${bubbles}</span><span class="badge warm">${NOTIFICATIONS > 9 ? '9+' : NOTIFICATIONS}</span></span><span class="name">Notifications</span></div>
+        <div class="person extra"><span class="port" ${water(1)}><span class="splash" aria-hidden="true"></span><span class="face status">${ICONS.person}${bubbles}</span><span class="plus">+</span></span><span class="name">Add Status</span></div>
         ${this.recipients.map(avatar).join('')}
       </div>
       <label class="haptic" aria-hidden="true"><input type="checkbox" switch tabindex="-1"></label>`;

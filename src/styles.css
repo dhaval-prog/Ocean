@@ -194,7 +194,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 
 /* --- people row at the top (you in the middle, friends to the right) ------ */
 .people {
-  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(176px + var(--safe-t)); padding-top: calc(14px + var(--safe-t));
+  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(156px + var(--safe-t)); padding-top: calc(10px + var(--safe-t));
   overflow: hidden; touch-action: none;
   background: linear-gradient(to bottom, var(--card) 0%, transparent 100%);
 }
@@ -203,58 +203,86 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .people { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); }
 .people-track { display: flex; gap: 28px; align-items: flex-start; width: max-content; transition: transform 0.45s cubic-bezier(.2, .9, .25, 1.1); }
 .person {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 0; border: 0; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 90px; padding: 0; border: 0; background: none;
   font: inherit; color: var(--ink); opacity: 0.38; transition: opacity 0.35s, transform 0.35s cubic-bezier(.2, .9, .3, 1.2); cursor: pointer;
 }
 .person.selected { opacity: 1; }
 .person.extra { cursor: default; }
-/* --- porthole avatars: brass rim with rivets, glass glare, photo or initials inside --- */
-.person .port { position: relative; display: grid; place-items: center; margin: 7px 0 3px; }
+/* --- water avatars: each sits in a circle of water - a rippling ring, droplets
+   splashing out from it and bubbles rising inside - round a photo or initials --- */
+.person .port { position: relative; display: grid; place-items: center; margin: 15px 0 13px; }
 .person .face {
-  position: relative; width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
-  background: var(--c, #ccc); color: #fff; font: 700 26px/1 system-ui, sans-serif; letter-spacing: 0.02em;
-  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.35), inset 0 -2px 5px rgba(255, 255, 255, 0.18);   /* set back into the hull */
+  position: relative; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
+  background: var(--c, #ccc); color: #fff; font: 700 18px/1 system-ui, sans-serif; letter-spacing: 0.02em;
+  /* no border: the picture fades out softly toward its round edge */
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 72%, rgba(0, 0, 0, 0.6) 86%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, #000 72%, rgba(0, 0, 0, 0.6) 86%, transparent 100%);
   transition: width 0.3s, height 0.3s, font-size 0.3s;
 }
-.person .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.person .face .initials { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
-/* brass rim with four rivets */
+.person .face img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }   /* the photo covers the initials */
+.person .face .initials { position: relative; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+.person .face > svg { position: relative; z-index: 1; }
+/* the rippling ring of water */
 .person .port::before {
-  content: ''; position: absolute; inset: -7px; border-radius: 50%; z-index: 1; pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 3.5px, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
-    radial-gradient(circle at 50% calc(100% - 3.5px), #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
-    radial-gradient(circle at 3.5px 50%, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
-    radial-gradient(circle at calc(100% - 3.5px) 50%, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
-    conic-gradient(from 200deg, #f0d48a, #a57628, #f6e2a4, #8b6220, #dcb462, #b98a3a, #f0d48a);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px));
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  content: ''; position: absolute; inset: -11px; z-index: 1; pointer-events: none;   /* a clear gap of sea between the picture and the water */
+  background: url('/water/ring.svg') center / 100% 100% no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(20, 80, 140, 0.35));
+  animation: water-turn 24s linear infinite; animation-delay: calc(var(--d, 0s) * -5);   /* slow, steady, one way */
 }
-/* glass: a glare sweeping across the top */
+@keyframes water-turn { to { transform: rotate(1turn); } }
+/* a soft wet highlight on top */
 .person .port::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 2; pointer-events: none;
-  background:
-    radial-gradient(ellipse 34% 15% at 34% 20%, rgba(255, 255, 255, 0.75), transparent 70%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 32%, transparent 48%, transparent 80%, rgba(255, 255, 255, 0.12) 100%);
+  background: radial-gradient(ellipse 30% 14% at 36% 24%, rgba(255, 255, 255, 0.55), transparent 70%);
 }
-/* unread letters: a rainbow ring outside the rim that slowly turns, fading once read */
+/* droplets splashing out from the ring every few seconds */
+.person .splash {
+  position: absolute; inset: -20px; z-index: 0; pointer-events: none; opacity: 0;
+  background: url('/water/splash.svg') center / 100% 100% no-repeat;
+  animation: water-splash 3.2s cubic-bezier(.2, .7, .3, 1) infinite; animation-delay: var(--d, 0s);
+}
+@keyframes water-splash {
+  0% { opacity: 0; transform: scale(0.72) rotate(0deg); }
+  12% { opacity: 1; transform: scale(0.92) rotate(6deg); }
+  38% { opacity: 0; transform: scale(1.12) rotate(12deg); }
+  100% { opacity: 0; transform: scale(1.12) rotate(12deg); }
+}
+/* bubbles rising inside the circle */
+.person .bubbles { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.person .bubbles i {
+  position: absolute; bottom: -8px; width: 6px; height: 6px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0 18%, rgba(255, 255, 255, 0.15) 40%, rgba(255, 255, 255, 0.55) 72%, transparent 76%);
+  animation: water-bubble 3.4s ease-in infinite;
+}
+.person .bubbles i:nth-child(1) { left: 22%; animation-delay: calc(var(--d, 0s) + 0.0s); }
+.person .bubbles i:nth-child(2) { left: 48%; width: 4px; height: 4px; animation-delay: calc(var(--d, 0s) + 0.9s); animation-duration: 2.8s; }
+.person .bubbles i:nth-child(3) { left: 66%; width: 7px; height: 7px; animation-delay: calc(var(--d, 0s) + 1.7s); animation-duration: 3.9s; }
+.person .bubbles i:nth-child(4) { left: 36%; width: 3px; height: 3px; animation-delay: calc(var(--d, 0s) + 2.4s); }
+.person .bubbles i:nth-child(5) { left: 74%; width: 4px; height: 4px; animation-delay: calc(var(--d, 0s) + 0.5s); animation-duration: 3s; }
+@keyframes water-bubble {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  15% { opacity: 0.9; }
+  50% { transform: translate(3px, -36px) scale(1); }
+  85% { opacity: 0.8; }
+  100% { opacity: 0; transform: translate(-2px, -72px) scale(1.15); }
+}
+/* unread letters: a rainbow ring outside the water that slowly turns, fading once read */
 .person .ring {
-  position: absolute; inset: -12px; border-radius: 50%; z-index: 0; pointer-events: none;
+  position: absolute; inset: -16px; border-radius: 50%; z-index: 0; pointer-events: none;
   background: conic-gradient(#ff7a59, #ffc94a, #5ed39b, #4aa8ff, #b27bff, #ff7a59);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
   animation: ring-turn 4s linear infinite; transition: opacity 1.2s ease;
 }
 .person .ring.read { opacity: 0; }
 @keyframes ring-turn { to { transform: rotate(1turn); } }
 /* on the ocean right now: a little boat bobbing on the avatar */
 .person .online {
-  position: absolute; right: -9px; bottom: -6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
-  display: grid; place-items: center; background: #fff; color: #2f6fb5; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+  position: absolute; right: -12px; bottom: -10px; z-index: 3; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; background: #fff; color: #2f6fb5; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   animation: boat-bob 2.4s ease-in-out infinite;
 }
-.person .online svg { width: 70%; height: 70%; }
+.person .online svg { width: 72%; height: 72%; }
 @keyframes boat-bob { 50% { transform: translateY(-2px) rotate(-6deg); } }
 /* picking someone: squash & stretch */
 .person .port.pop { animation: port-pop 0.55s cubic-bezier(.3, .7, .4, 1); }
@@ -263,28 +291,32 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   68% { transform: scale(1.04, 0.97); } 100% { transform: scale(1); }
 }
 .haptic { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .person .ring, .person .online, .person .port.pop { animation: none; } }
-.person.selected .face { width: 96px; height: 96px; font-size: 32px; }
+@media (prefers-reduced-motion: reduce) { .person .ring, .person .online, .person .port.pop, .person .port::before, .person .splash, .person .bubbles i { animation: none; } }
+.person.selected .face { width: 68px; height: 68px; font-size: 22px; }
 .person .face.bell { background: #8e8a76; color: #fff; }
 .person .face.status { background: #5d5847; color: #fff; }
 .person .face svg { width: 38%; height: 38%; }
 .person .port .badge, .person .port .plus { z-index: 3; }
 .person .face .plus, .person .port .plus {
-  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
-  background: #6cc06c; color: #fff; font: 700 18px/1 system-ui, sans-serif; border: 2px solid #fff;
+  position: absolute; right: -10px; bottom: -8px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  background: #6cc06c; color: #fff; font: 700 14px/1 system-ui, sans-serif; border: 1.5px solid #fff;
 }
-.people .badge { background: #7d9be0; top: -8%; right: -8%; }
-.people .badge.warm { background: #e48a73; top: auto; bottom: 2%; right: -6%; }
-.person .name { font-weight: 700; font-size: 14px; white-space: nowrap; }
-.person.selected .name { font-size: 18px; }
-.person .city { font-size: 12px; opacity: 0.7; }
+.people .badge { font-size: 9.5px; border-width: 1.5px; }
+.people .badge { background: #7d9be0; top: -16%; right: -16%; }
+.people .badge.warm { background: #e48a73; top: auto; bottom: -10%; right: -18%; }
+.person .name { font-weight: 600; font-size: 12px; white-space: nowrap; }
+.person.selected .name { font-size: 14px; font-weight: 700; }
+.person .city { font-size: 11px; opacity: 0.7; }
 @media (max-width: 640px) {
-  .people { height: calc(146px + var(--safe-t)); }
-  .people-track { gap: 14px; }
-  .person { width: 76px; }
-  .person .face { width: 60px; height: 60px; font-size: 20px; }
-  .person.selected .face { width: 76px; height: 76px; font-size: 26px; }
-  .person .name { font-size: 12px; } .person.selected .name { font-size: 15px; }
+  .people { height: calc(136px + var(--safe-t)); }
+  .people-track { gap: 10px; }
+  .person { width: 74px; }
+  .person .face { width: 44px; height: 44px; font-size: 15px; }
+  .person.selected .face { width: 54px; height: 54px; font-size: 18px; }
+  .person .name { font-size: 11px; } .person.selected .name { font-size: 13px; }
+  .person .city { font-size: 10px; }
+  .person .online { width: 17px; height: 17px; right: -11px; bottom: -9px; }
+  .person .port { margin: 13px 0 11px; }
 }
 
 /* while writing, the ocean UI steps back */
