@@ -23,7 +23,8 @@ const planeTilt = k => 0.12 * k + (PLANE_TILT - 0.12) * smoothstep(0.62, 1, k);
 const planeQ = (k, bank = 0) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -planeTilt(k))
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * smoothstep(0.62, 1, k) + bank));
 const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
+const DUR = { sink: 1.7, fly: 1.1, toScreen: 0.45, hover: 0.45,   // the paper comes up and settles in 2 s
+  fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
 if (REDUCED) { DUR.fold *= 0.55; DUR.plane *= 0.6; DUR.bottle *= 0.6; DUR.reform *= 0.6; }   // reduced motion: quicker folds and flights
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

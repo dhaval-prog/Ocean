@@ -920,3 +920,44 @@ body.saver-gfx .chats .c-bub.waiting .c-bglass { animation: none; }
 body.saver-gfx .chats .c-bub.swarm .c-swarm { animation-duration: 0.38s; }
 body.saver-gfx .chats.unswarming .c-bub .c-swarm { animation-duration: 0.3s; }
 @media (prefers-reduced-motion: reduce) { .chats .c-bub.swarm .c-swarm, .chats.unswarming .c-bub .c-swarm, .chats.swarming .c-allbtn { animation: none !important; } }
+
+/* --- chat button: solid dark blue, white icon --------------------------------------------- */
+.chats-btn { width: 64px; height: 64px; right: calc(16px + var(--safe-r, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+.chats-btn .cb-solid { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; background: #1d3a8a; color: #fff;
+  box-shadow: 0 8px 20px rgba(10, 25, 70, 0.4); transition: transform 0.15s; }
+.chats-btn .cb-solid svg { width: 30px; height: 30px; }
+.chats-btn:active .cb-solid { transform: scale(0.92); }
+.chats-btn .badge { right: -4px; top: -4px; border: 2px solid #fff; }
+.chats-btn.popping .cb-solid { animation: gb-pop 0.15s ease-out forwards; }
+.chats-btn .cb-solid.boing { animation: gb-boing 0.7s cubic-bezier(.3, 1.6, .5, 1); }
+.chats-btn .cb-solid.reform { animation: gb-reform 0.6s cubic-bezier(.3, 1.5, .5, 1); }
+
+/* --- chat screen: back + paper plane above the message box; letters as plane / bottle messages --- */
+.chats.sheet-mode .c-thead { padding: 8px 18px 12px; }
+.chats.sheet-mode .c-compose::before { display: none; }
+.chats .c-tools { display: flex; gap: 10px; padding: 6px 12px 8px; }
+.chats.sheet-mode .c-tools .c-round { width: 44px; height: 44px; }
+.chats.sheet-mode .c-tools .c-round svg { width: 22px; height: 22px; }
+.chats .c-lmsg { display: flex; align-items: center; gap: 10px; flex-direction: row; text-align: left; cursor: pointer; border: 0; font: inherit; }
+.chats.sheet-mode .c-lmsg { padding: 10px 14px 10px 10px; }
+.chats .c-lic { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.92); color: #1d3a8a; }
+.chats .c-lic svg { width: 22px; height: 22px; }
+.chats .c-ltxt { display: flex; flex-direction: column; gap: 3px; }
+.chats .c-ltxt b { font: 700 15px/1.2 'Figtree', system-ui, sans-serif; } .chats .c-ltxt small { font: 500 12px/1 'Figtree', system-ui, sans-serif; opacity: 0.8; }
+.chats .c-lmsg .c-at { align-self: flex-end; margin-left: 4px; }
+.chats .c-lmsg:active { transform: scale(0.97); }
+/* a letter opened from the chat */
+.chats .c-lview { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: rgba(5, 20, 45, 0.45); animation: c-fadein 0.2s ease-out; }
+.chats .c-lview.out { transition: opacity 0.2s; opacity: 0; }
+.chats .c-lpaper { position: relative; width: min(340px, 100%); min-height: 260px; box-sizing: border-box; padding: 22px 22px 26px; border-radius: 8px; background: #fffbea; color: #2b3a7a;
+  box-shadow: 0 18px 40px rgba(0, 20, 50, 0.4); transform: rotate(-1.5deg); animation: c-letter-in 0.35s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes c-letter-in { from { transform: rotate(-8deg) scale(0.6); opacity: 0; } }
+.chats .c-ltag { display: flex; align-items: center; gap: 6px; font: 500 11px/1 'DM Mono', ui-monospace, monospace; letter-spacing: 0.06em; color: #8a8f7c; text-transform: uppercase; }
+.chats .c-ltag svg { width: 16px; height: 16px; color: #2b3a7a; }
+.chats .c-lpaper p { margin: 18px 0 0; font: 600 26px/1.3 'Caveat', cursive; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chats .c-lpaper .c-round { position: absolute; right: -12px; top: -12px; width: 38px; height: 38px; }
+/* keyboard open: the chats fit above it, the message box sits right on top */
+.chats.kb .c-sheet.full { height: calc(100% - 8px); }
+.chats.kb .c-sheet .c-page { padding-bottom: 0; }
+.chats.kb .c-compose { margin-bottom: 6px; }
+.chats .c-lpaper .c-round { color: #1b2113; background: #fff; box-shadow: 0 3px 10px rgba(0, 20, 50, 0.3); }
