@@ -72,6 +72,13 @@ export class Post {
     this.grade.uniforms.tMask.value = this.maskRT.texture;
   }
 
+  /** Edge smoothing (MSAA samples) of the main render: 4 for high quality, 0 to save the GPU. */
+  setSamples(n) {
+    const max = this.renderer.capabilities.isWebGL2 ? (this.renderer.capabilities.maxSamples || 4) : 0;
+    n = Math.min(n, max);
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== n) { rt.samples = n; rt.dispose(); }
+  }
+
   /** Objects kept free of the ink outlines (the letter paper). */
   setUninked(obj) { this.uninked = obj; obj.layers.enable(MASK_LAYER); }
 

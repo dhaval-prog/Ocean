@@ -497,3 +497,7 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 .letter-actions button.listening { background: #e8674b; color: #fff; animation: listen-pulse 1.2s ease-in-out infinite; }
 @keyframes listen-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(232, 103, 75, 0.55); } 50% { box-shadow: 0 0 0 10px rgba(232, 103, 75, 0); } }
 .letter .voice.playing canvas { animation: rec-pulse 1.4s ease-in-out infinite; }
+
+/* settings: the graphics switch */
+.panel .check.gfx { font-weight: 600; }
+.panel .check.gfx input[switch] { accent-color: #3d4aa3; }
