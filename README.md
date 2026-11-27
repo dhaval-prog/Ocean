@@ -25,6 +25,11 @@ npm run build      # production build in dist/
   - **Fog**: the water fades into soft grey-white with distance in uneven banks that drift with the wind; the sun is a diffuse glow instead of glitter.
   - **Clouds**: soft-edged shadows (two layers); Clear → Overcast dulls and greys the colours and hides the sun glitter. The stylised wind lines give way to rain and fog.
   - **Extras**: a rainbow after a good shower (daytime, not in rain or fog) with a smooth spectrum, a faint secondary bow and the darker band between, sea spray off the bow in rough water at speed, and one wind direction that turns the waves and foam, the smoke and the wind streaks together.
+  - **Colour by time of day**: rain drops, rings and spray are pink-gold at dawn, silver by day, amber at sunset, lavender at dusk and moonlit blue at night; lightning is warmer at sunset, violet-white at dusk, blue-white at night (and so is the patch of sea it lights); fog glows pink-peach at dawn, gold at sunset (with the sun as a big soft disc) and blue-silver at night (with a halo round the moon). At night rain rings sparkle cyan, and a lightning flash makes the whole sea and every glowing wake and ring flare.
+  - **Sunbeams**: on cloudy days, after showers and as sunset light breaks into a storm, patches of sunlight drift across the water. Sail into one and the water glows gold round the boat (soft chime). After a shower the sun breaks through in a big sweep, then the rainbow appears.
+  - **Rainbow**: stays where it appeared, so you can sail under its arc (sparkles and a chime). On some clear nights after rain it is a pale moonbow.
+  - **Rare moments**: a waterspout now and then in a thunderstorm (a twisting funnel far off, drifting across with a whirl of spray at its base), and short hail bursts in heavy rain (pellets bounce off the water, with a rattle).
+  - **The boat in the weather**: a headwind holds it back and a tailwind lets it surf faster (it also drifts slowly downwind in strong wind). Its windows light up in storms and fog, a searchlight sweeps the water, and in fog it sounds a foghorn now and then (Space gives a foghorn too). A close lightning strike jolts it: it heels over, rocks hard and its lights flicker; steering away from the strike calms it faster.
   - URL option: `?weather=clear|cloudy|rain|storm|fog` starts in a fixed weather.
 - **Ocean colour** (Account settings): Deep Ocean (default), Tropical, Nordic or Pastel, applied on top of every time of day and remembered. Defined in `src/ocean/palettes.js` (`STYLES`).
 - **Time of day**: **Real time** by default (follows the device clock: dawn ~6:30, day 8:30–16:30, sunset ~18:30, dusk ~19:45, night from 21:00), or a **1-hour cycle** (dawn → night → dawn every hour), or **Manual** (picking a time or dragging the slider). The choice is remembered. Mapping in `src/core/Clock.js`.
@@ -65,6 +70,8 @@ src/
   weather/Rain.js    falling rain
   weather/Spray.js   bow spray, strike splashes
   weather/Lightning.js lightning bolts
+  weather/Hail.js    hail bursts
+  weather/Waterspout.js waterspout
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings
   boat/Smoke.js      funnel smoke puffs (one batch)

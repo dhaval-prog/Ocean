@@ -17,6 +17,8 @@ import { Weather, PRESETS } from './weather/Weather.js';
 import { Rain } from './weather/Rain.js';
 import { Spray } from './weather/Spray.js';
 import { Lightning } from './weather/Lightning.js';
+import { Hail } from './weather/Hail.js';
+import { Waterspout } from './weather/Waterspout.js';
 import './styles.css';
 
 const app = document.getElementById('app');
@@ -57,7 +59,10 @@ const spray = new Spray();
 scene.add(ocean.mesh, particles.points, streaks.mesh, rain.points, spray.points);
 const weather = new Weather();
 const lightning = new Lightning();
-scene.add(lightning.group);
+const hail = new Hail();
+const spout = new Waterspout();
+const sparkles = new Spray('#fff2b8', 1.3);          // magic sparkles (rainbow, sunbeams)
+scene.add(lightning.group, hail.points, spout.mesh, sparkles.points);
 // lightning lights up the sky behind the sea too
 const flashEl = document.createElement('div'); flashEl.className = 'flash'; flashEl.setAttribute('aria-hidden', 'true');
 
@@ -99,7 +104,7 @@ function applyLook() {
   const g = ocean.storm * ocean.storm * 0.55;                       // storms grey the sky to match the sea
   skyNow.copy(ocean.skyColor).lerp(stormGrey, g).lerp(cloudGrey, W.clouds * 0.3);
   skyTopNow.copy(ocean.skyTopColor).lerp(stormGrey, g * 1.1).lerp(cloudGrey, W.clouds * 0.35);
-  fogNow.copy(fogWhite).multiplyScalar(0.18 + 0.82 * ocean.light).lerp(skyNow, 0.35);
+  fogNow.copy(ocean.fogTint).multiplyScalar(0.35 + 0.65 * ocean.light).lerp(skyNow, 0.25);   // fog glows with the light: peach dawn, gold sunset, blue-silver night
   skyNow.lerp(fogNow, W.fog * 0.6); skyTopNow.lerp(fogNow, W.fog * 0.7);
   ocean.uniforms.uFogCol.value.copy(fogNow);
   setCss('--sky', '#' + skyNow.getHexString());
@@ -161,8 +166,98 @@ weather.onThunder = (delay, strength, near) => {
   if (near) {
     ocean.addRipple(x, z, 1); setTimeout(() => ocean.addRipple(x + 0.3, z - 0.2, 0.8), 180);
     spray.burst(x, z, ocean.base, 45, 1.1);
+    // close to the boat: it jolts, rocks hard and its lights flicker
+    const db = Math.hypot(x - boat.position.x, z - boat.position.y);
+    if (db < 14 && boat.ready && !boat.frozen) boat.jolt(x, z, THREE.MathUtils.clamp(1.3 - db / 14, 0.35, 1));
   }
 };
+
+// --- weather moments -----------------------------------------------------------
+// Sunbeams: patches of sunlight breaking through gaps in the clouds (cloudy
+// days, clearing showers, and sunset light breaking into a storm). Sail into
+// one and the water glows gold round the boat.
+const beams = [null, null, null];
+let beamTimer = 4, beamChimeAt = 0, boatGlow = 0;
+function spawnBeam(big = false) {
+  const slot = beams.findIndex(b => !b); if (slot < 0) return;
+  const halfW = controls.worldPerPixel() * app.clientWidth / 2;
+  const wd = weather.windDir;
+  if (big) {   // the sun breaking through after a shower: a big patch sweeping across the view
+    beams[slot] = { x: controls.center.x - wd[0] * 22, z: controls.center.z - wd[1] * 22, r: 13, vx: wd[0] * 1.3, vz: wd[1] * 1.3, age: 0, life: 32 };
+  } else {
+    beams[slot] = { x: controls.center.x + (Math.random() - 0.5) * 2 * halfW, z: controls.center.z - 6 + Math.random() * 14, r: 4 + Math.random() * 5,
+      vx: wd[0] * (0.3 + weather.cur.wind * 0.8), vz: wd[1] * (0.3 + weather.cur.wind * 0.8), age: 0, life: 20 + Math.random() * 20 };
+  }
+}
+weather.onSunbreak = () => { if (ocean.light > 0.45) spawnBeam(true); };
+function updateBeams(dt) {
+  const W = weather.cur, U = ocean.uniforms.uBeams.value;
+  const sky = W.clouds > 0.35 && ocean.light > 0.45 && W.fog < 0.5;
+  const rate = W.thunder > 0.3 ? (ocean.light < 0.9 ? 0.06 : 0.02) : 0.07;   // storms: mostly sunset light breaking through
+  if (sky && (beamTimer -= dt) <= 0) { beamTimer = 1 / rate * (0.6 + Math.random() * 0.8); spawnBeam(); }
+  let inBeam = 0;
+  beams.forEach((b, i) => {
+    if (!b) { U[i].w = 0; return; }
+    b.age += dt; b.x += b.vx * dt; b.z += b.vz * dt;
+    if (b.age > b.life) { beams[i] = null; U[i].w = 0; return; }
+    if (!sky && b.r < 10) b.life = Math.min(b.life, b.age + 4);        // clouds closed / night fell: fade out
+    const fade = Math.max(0, Math.min(1, b.age / 4, (b.life - b.age) / 4));
+    U[i].set(b.x, b.z, b.r, fade);
+    if (boat.ready && Math.hypot(boat.position.x - b.x, boat.position.y - b.z) < b.r * 0.7) inBeam = Math.max(inBeam, fade);
+  });
+  boatGlow += (inBeam - boatGlow) * Math.min(1, dt * 1.5);
+  ocean.uniforms.uBoatGlow.value = boatGlow;
+  if (inBeam > 0.6 && elapsed > beamChimeAt) {          // sailed into the sunlight
+    beamChimeAt = elapsed + 12; ambience.chime('sun');
+    sparkles.burst(boat.position.x, boat.position.y, ocean.base + 0.3, 24, 0.6);
+  }
+}
+
+// Rainbow: anchored in the world where it appears; sail under its arc for a sparkle and a chime.
+let bowAnchored = false, bowChimeAt = 0;
+function updateRainbow() {
+  const U = ocean.uniforms;
+  if (U.uRainbow.value > 0.01 && !bowAnchored) {
+    const camH = Math.max(camera.position.y - ocean.base, 1);
+    U.uRainbowPos.value.set(camera.position.x, camera.position.z - 0.15 * camH);   // where the view-relative arc used to sit
+    U.uRainbowS.value = camH;
+    bowAnchored = true;
+  } else if (U.uRainbow.value <= 0.005 && weather.rainbow < 0.01) bowAnchored = false;
+  if (!bowAnchored || !boat.ready || U.uRainbow.value < 0.25) return;
+  const S = U.uRainbowS.value, bx = boat.position.x - U.uRainbowPos.value.x, bz = boat.position.y - U.uRainbowPos.value.y;
+  const r = Math.hypot(bx, bz) / S, al = -bz / S;
+  if (r > 0.93 && r < 1.12 && al > -0.1 && elapsed > bowChimeAt) {
+    bowChimeAt = elapsed + 6; ambience.chime('rainbow');
+    sparkles.burst(boat.position.x, boat.position.y, ocean.base + 0.6, 50, 1.0);
+  }
+}
+
+// Waterspout: rare in a thunderstorm, far off, drifting slowly across.
+let spoutCheck = 25, spoutDrop = 0;
+function updateSpout(dt) {
+  const W = weather.cur;
+  if (!spout.active && W.thunder > 0.5 && (spoutCheck -= dt) <= 0) {
+    spoutCheck = 60 + Math.random() * 60;
+    if (Math.random() < 0.4) spawnSpout();
+  }
+  const base = spout.update(dt, elapsed, { light: ocean.light, tint: ocean.fogTint });
+  if (base && (spoutDrop -= dt) <= 0) {              // a whirl of spray and rings where it touches the sea
+    spoutDrop = 0.25;
+    ocean.addRipple(base.x + (Math.random() - 0.5), base.y + (Math.random() - 0.5), 0.8);
+    spray.burst(base.x, base.y, ocean.base, 6, 0.8);
+  }
+}
+function spawnSpout() {
+  // far off, near the top of the view (how far that is depends on the screen shape)
+  const side = Math.random() < 0.5 ? -1 : 1, camH = Math.max(camera.position.y - ocean.base, 1);
+  const dTop = camH / Math.tan(THREE.MathUtils.degToRad(controls.pitch - camera.fov / 2));
+  const halfW = controls.worldPerPixel() * app.clientWidth / 2;
+  spout.spawn(controls.center.x - side * halfW * (0.3 + Math.random() * 0.4), camera.position.z - dTop * (0.72 + Math.random() * 0.08),
+    side * (0.35 + Math.random() * 0.35), 0.05, ocean.base, 40 + Math.random() * 20);
+}
+
+// Foghorn: in fog the boat sounds it now and then (and the horn key gives a foghorn)
+let foghornIn = 6;
 const saveTod = () => { try { localStorage.setItem(MODE_KEY, state.mode); localStorage.setItem(TOD_KEY, String(state.tod % 5)); } catch {} };
 let todLabelAt = 0;
 function showTod() {
@@ -245,7 +340,7 @@ let pressed = false, lastTrail = 0, down = null;
 // camera's, so the view does not pan while you steer.
 let steer = null;
 function honk() {
-  ambience.horn();
+  if (weather.cur.fog > 0.5) ambience.foghorn(); else ambience.horn();
   smoke.burst(boat.funnelWorld(), boat.heading, 3);
 }
 app.addEventListener('pointerdown', e => {
@@ -363,6 +458,7 @@ function applySize() {
   streaks.setSize(W * pixelRatio, H * pixelRatio);
   smoke.setScale(H * pixelRatio, camera.fov);
   spray.setScale(H * pixelRatio, camera.fov);
+  sparkles.setScale(H * pixelRatio, camera.fov);
 }
 function resize() {
   W = app.clientWidth || 1; H = app.clientHeight || 1;
@@ -434,21 +530,31 @@ renderer.setAnimationLoop(() => {
   // sea spray off the bow in rough water
   const live = boat.ready && !boat.frozen && boat.group.visible;
   if (live) bowPos.set(boat.position.x + Math.cos(boat.heading) * 2.2, 0, boat.position.y - Math.sin(boat.heading) * 2.2);
+  lightning.setColor(ocean.uniforms.uFlashCol.value);
   lightning.update(camera, Math.min(1, weather.flash / 0.6));
-  spray.setLight(ocean.light);
+  spray.setLight(ocean.light, ocean.uniforms.uRainCol.value);
+  sparkles.update(dt, { bow: null, heading: 0, speed01: 0, rough: 0, water: ocean.base });
+  hail.update(elapsed, { center: controls.center, hail: weather.hail, windDir: weather.windDir, wind: W.wind, pixelRatio, light: ocean.light });
+  updateBeams(dt); updateRainbow(); updateSpout(dt);
+  // the boat in the weather: wind, window lights, searchlight, foghorn
+  boat.setWind(weather.windDir, W.wind);
+  const gloom = Math.max(W.fog, W.thunder, W.rain * W.clouds * 0.8);
+  boat.setSearchlight(Math.max(W.fog, W.thunder) > 0.4 ? 1 : 0);
+  if (boat.spot) ocean.uniforms.uSpot.value.set(boat.spot.x, boat.spot.z, boat.spot.r, boat.ready && !boat.frozen ? boat.spot.i * (1 - Math.min(1, ocean.light) * 0.6) : 0);   // stands out more the darker it is
+  if (W.fog > 0.55 && live && (foghornIn -= dt) <= 0) { foghornIn = 28 + Math.random() * 20; ambience.foghorn(); }
   spray.update(dt, { bow: live ? bowPos : null, heading: boat.heading, speed01: Math.max(0, boat.speed) / boat.maxSpeed, rough: ocean.storm, water: ocean.base });
-  rain.update(elapsed, { center: controls.center, rain: W.rain, wind: W.wind, windDir: weather.windDir, pixelRatio, light: ocean.light });
+  rain.update(elapsed, { center: controls.center, rain: W.rain, wind: W.wind, windDir: weather.windDir, pixelRatio, light: ocean.light, tint: ocean.uniforms.uRainCol.value });
   ambience.setEngine(boat.throttle01);
-  boat.setNight(L.night);
+  boat.setNight(Math.max(L.night, gloom * 0.9));      // windows light up at night and in storms / fog
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
   particles.update(elapsed, { center: controls.center, look: lookWx, storm: ocean.storm, pixelRatio, glintColor });
   streaks.update(elapsed, ocean.storm, ocean.light, weather.windDir, W.wind, (1 - W.rain * 0.9) * (1 - W.fog * 0.85));   // anime wind lines give way to rain and fog
   post.update(L.night, ocean.storm);
-  ambience.update(ocean.storm, L.night, W.rain, W.wind);
+  ambience.update(ocean.storm, L.night, W.rain, W.wind, weather.hail);
 
   post.render(dt);
   quality.tick(dt);
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };

@@ -10,6 +10,8 @@ uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1
 uniform float uBoatShadow; uniform vec2 uLightDir; uniform vec3 uLightCol; uniform float uRefl;
 uniform float uClouds; uniform float uCloudT; uniform float uRain; uniform float uFog; uniform vec3 uFogCol;
 uniform float uFlash; uniform float uRainbow; uniform float uThunder; uniform vec2 uFlashPos;
+uniform vec3 uFlashCol; uniform vec3 uRainCol; uniform vec2 uRainbowPos; uniform float uRainbowS; uniform float uBowMoon;
+uniform vec4 uBeams[3]; uniform vec4 uSpot; uniform float uBoatGlow;
 // where rain falls heaviest: broad sheets sweeping downwind (same formula as Rain.js)
 float rainSheet(vec2 p, vec2 w, float t){ vec2 wp = vec2(-w.y, w.x);
   return clamp(0.5 + 0.5*sin(dot(p, wp)*0.11 - t*0.35)*sin(dot(p, w)*0.07 - t*0.5 + 1.3) + 0.25*sin(dot(p, w)*0.031 + dot(p, wp)*0.023 - t*0.21), 0.0, 1.0); }
@@ -43,6 +45,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
     vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
     vec4 fx = mix(uFxA, uFxB, m);
+    float flare = 1.0 + uFlash*3.5*fx.z;   // a night lightning flash makes everything that glows flare up
 
     // drop ripples: damped concentric waves spreading from where something hit
     // the water. They also bend the water pattern, like real refraction.
@@ -141,7 +144,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     // kept faint so the rings sit quietly on the surface
     c *= 1.0 + rH*0.1;
     c = mix(c, pal[5], clamp(rCrest*0.65 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
-    c += GLOW*(rCrest*0.9 + rSplash)*fx.z*0.75;                          // glow cyan-blue at night
+    c += GLOW*(rCrest*0.9 + rSplash)*fx.z*0.75*flare;                          // glow cyan-blue at night
 
     // boat wake: a V of foam spreading back from the bow, churned water behind
     // the stern and a white splash at the bow, all growing with speed
@@ -175,7 +178,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
                    * (0.6 + 0.4*oc_noise(vec2(atan(ly, lx - bow)*6.0, t*5.0)));
       float wake = clamp(arm + wash*0.8 + splash, 0.0, 1.0);
       c = mix(c, pal[5], wake*0.85*(1.0 - fx.z*0.4));
-      c += GLOW*wake*fx.z*0.6;                                     // glowing wake at night
+      c += GLOW*wake*fx.z*0.6*flare;                                     // glowing wake at night
     }
 
     // foam rings around floating objects (boats, players)
@@ -189,7 +192,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       rf += (ring + wake*0.5)*O.w; rg += (ring + wake)*O.w*0.6;
     }
     c = mix(c, pal[5], clamp(rf, 0.0, 1.0)*0.75*(1.0 - fx.z*0.5));
-    c += GLOW*rg*fx.z*0.45;
+    c += GLOW*rg*fx.z*0.45*flare;
 
     // cartoon twinkles: little 4-point stars that pop in and out
     vec2 sc = p*1.6, cell = floor(sc), f = fract(sc) - 0.5;
@@ -246,8 +249,12 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       float gl = dash * step(0.8 - band*0.35*uRefl, oc_hash(gc + floor(t*0.8 + gh)*7.1)) * sin(ph*3.14159);
       float refl = band * uRefl * (1.0 - uStorm*0.65) * (1.0 - cs*0.6) * (1.0 - uClouds*0.9) * (1.0 - uFog*0.7);
       c += uLightCol * refl * (0.09 + gl*2.0);
-      // in fog the sun is a soft diffuse glow instead of glitter
-      c += uLightCol * band * uRefl * uFog * (1.0 - uClouds*0.6) * (1.0 - uStorm*0.6) * 0.22;
+      // in fog the sun is a soft diffuse glow instead of glitter: a big pale
+      // disc reflected ahead, and at night the moon wears a halo
+      float fogSun = uFog * (1.0 - uClouds*0.5) * (1.0 - uStorm*0.6);
+      float dd = length(vec2(across, along - 1.35));
+      float disc = smoothstep(0.42, 0.26, dd), halo = smoothstep(0.07, 0.0, abs(dd - 0.62))*fx.z;
+      c += uLightCol * (band*uRefl*0.22 + disc*0.32 + halo*0.3 + smoothstep(1.3, 0.0, dd)*0.12) * fogSun;
     }
 
     // sky reflection on the far side, deeper up close
@@ -273,6 +280,19 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, vec3(lum2)*vec3(0.93, 0.99, 1.04), uClouds*0.55);   // diffuse light: colours go dull and grey
     c *= 1.0 - uClouds*0.17;
 
+    // sunbeams breaking through gaps in the clouds: bright, warm patches with
+    // soft ragged edges, coloured by the light (gold at sunset)
+    for (int i = 0; i < 3; i++) {
+      vec4 B = uBeams[i]; if (B.w <= 0.001) continue;
+      vec2 bv = p - B.xy;
+      float bdist = length(bv)/B.z + (oc_noise(p*0.12 + float(i)*7.0 + uCloudT*0.01) - 0.5)*0.45;
+      float pb = smoothstep(1.0, 0.45, bdist) * B.w;
+      vec3 sunC = mix(uLightCol, vec3(1.0, 0.85, 0.55), 0.35);
+      c = mix(c, c*1.45 + sunC*0.12, pb*(1.0 - fx.z));
+    }
+    // the water glows gold round the boat while it sits in a sunbeam
+    c += vec3(1.0, 0.82, 0.4)*uBoatGlow*smoothstep(4.5, 0.5, length(p - uBoat.xy))*0.3*(1.0 - fx.z);
+
     // rain on the water: a dimpled, darker surface where it is falling, with
     // small rings of different sizes popping everywhere; heaviest under the
     // sheets of rain sweeping across (they match the falling drops)
@@ -293,30 +313,33 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
         rings += smoothstep(0.022, 0.006, abs(rr - rad)) * (1.0 - rk)*(1.0 - rk) * on2;
         splash += smoothstep(0.035, 0.0, rr) * smoothstep(0.18, 0.0, rk) * on2;
       }
-      vec3 lit = c*1.35 + 0.04;                                                  // rings catch the sky light
+      vec3 lit = mix(c*1.35 + 0.04, uRainCol*0.95, 0.45);                     // rings catch the light: tinted by the time of day
       c = mix(c, lit, clamp(rings*0.5 + splash*0.8, 0.0, 1.0)*(1.0 - fx.z*0.4));
-      c += GLOW*rings*fx.z*0.2;
+      c += GLOW*(rings*0.65 + splash*0.8)*fx.z*flare;                          // a rainy night sparkles cyan like plankton
     }
 
     // rainbow after rain (daytime): a smooth spectrum, violet inside to red
     // outside, a fainter secondary bow outside it with the colours reversed,
     // and the slightly darker band of sky between them
     if (uRainbow > 0.01) {
-      float al = dot(rel, uViewDir)/camH, ac = dot(rel, vec2(-uViewDir.y, uViewDir.x))/camH;
-      float rr2 = length(vec2(ac, al - 0.15));
-      float ends = smoothstep(-0.1, 0.45, al - 0.15) * uRainbow * (1.0 - fx.z);
+      // anchored in the world where it appeared, so the boat can sail under it
+      vec2 rbv = p - uRainbowPos;
+      float al = dot(rbv, uViewDir)/uRainbowS, ac = dot(rbv, vec2(-uViewDir.y, uViewDir.x))/uRainbowS;
+      float rr2 = length(vec2(ac, al));
+      float ends = smoothstep(-0.1, 0.45, al) * uRainbow * (1.0 - fx.z*(1.0 - uBowMoon));
       float k1 = (rr2 - 0.95)/0.13, k2 = (rr2 - 1.22)/0.2;
       vec3 bow = vec3(0.0);
       if (k1 > 0.0 && k1 < 1.0) { vec3 h = clamp(abs(fract(0.78*(1.0 - k1) + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0 - 3.0) - 1.0, 0.0, 1.0); bow += h*sin(k1*3.14159)*0.28; }
       if (k2 > 0.0 && k2 < 1.0) { vec3 h = clamp(abs(fract(0.78*k2 + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0 - 3.0) - 1.0, 0.0, 1.0); bow += h*sin(k2*3.14159)*0.1; }
       c *= 1.0 - smoothstep(1.06, 1.12, rr2)*smoothstep(1.24, 1.18, rr2)*0.07*ends;  // darker band between the bows
       c *= 1.0 + smoothstep(0.95, 0.6, rr2)*0.04*ends;                           // a little brighter inside
+      bow = mix(bow, vec3(dot(bow, vec3(0.333)))*1.4 + 0.02, uBowMoon*0.85);   // moonbow: pale, almost white
       c += bow*ends;
     }
 
     // lightning: blue-white light, brightest under the strike, the rest of the sea lit by the clouds
     vec2 fdv = (p - uFlashPos)/camH;
-    c += vec3(0.62, 0.68, 0.9)*uFlash*(0.1 + 0.75*exp(-dot(fdv, fdv)*3.0));
+    c += uFlashCol*0.8*uFlash*(0.1 + 0.3*fx.z + 0.75*exp(-dot(fdv, fdv)*3.0));   // coloured by the time of day; lights the whole sea at night
 
     // fog: the water fades into soft grey-white with distance
     // fog: the water fades into soft grey-white with distance, in uneven
@@ -326,6 +349,12 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float bank = 0.45 + 0.9*oc_fbm(p*0.028 - uWind*t*0.35 + 61.0);
     float fogK = mist*(1.0 - exp(-pow(max(fdist - 0.3, 0.0)*1.1, 1.6)*(0.6 + mist*2.2)*bank));
     c = mix(c, uFogCol, clamp(fogK + mist*0.1*bank, 0.0, 0.97));
+
+    // the boat's searchlight: a warm pool of light sweeping over the water (cuts through the fog)
+    if (uSpot.w > 0.001) {
+      float sd = length(p - uSpot.xy)/uSpot.z;
+      c += vec3(1.0, 0.9, 0.7)*smoothstep(1.0, 0.0, sd)*smoothstep(1.0, 0.0, sd)*uSpot.w*0.5;
+    }
 
     // haze into the sky colour toward the horizon, then fade out at the edge
     float dist = max(abs(vLP.x), abs(vLP.y));
