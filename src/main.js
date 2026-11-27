@@ -122,6 +122,7 @@ const post = new Post(renderer, scene, camera);
 post.setUninked(seq.paper);   // no ink outlines on the letter paper
 const ambience = new Ambience();
 letter.audio = ambience;                                  // writing sounds, plops, mood music
+chats.audio = ambience;                                   // a plop as each chat bubble lands
 seq.planeTarget = () => letter.targetPoint();             // the paper plane flies into the chosen contact's circle
 seq.onSent = kind => letter.caught(kind);                 // …which catches it with a splash
 seq.onSplash = p => { spray.burst(p.x, p.z, ocean.base, 36, 0.9); ambience.plop(5); };   // the bottle hits the sea

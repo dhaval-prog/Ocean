@@ -899,3 +899,24 @@ body.saver-gfx .chats .c-bub.waiting .c-bglass { animation: none; }
 .chats .c-bub.reform .c-blabel { animation: c-fadein 0.4s ease-out 0.2s both; }
 @keyframes c-bub-reform { 0% { transform: scale(0.2); opacity: 0.4; } 55% { transform: scale(1.15, 0.9); opacity: 1; } 80% { transform: scale(0.95, 1.06); } 100% { transform: scale(1); } }
 @keyframes c-fadein { from { opacity: 0; } }
+
+/* --- opening chats: the chat button pops and its bubbles swarm out to their places ------- */
+.chats.page-list .c-sea { backdrop-filter: none; }
+.chats .c-blur { position: absolute; inset: 0; backdrop-filter: blur(9px) saturate(1.1) brightness(0.95); pointer-events: none; }
+.chats .c-swarm { position: absolute; inset: 0; }
+.chats .c-bub.swarm .c-swarm { animation: c-swarm-out 0.62s cubic-bezier(.22, .9, .3, 1.05) both; animation-delay: var(--sd, 0s); }
+@keyframes c-swarm-out { 0% { transform: translate(var(--fx), var(--fy)) scale(0.18); opacity: 0; } 12% { opacity: 1; } 70% { transform: translate(0, 0) scale(1.08, 0.94); } 85% { transform: scale(0.97, 1.04); } 100% { transform: none; opacity: 1; } }
+.chats .c-bub.swarm .c-av, .chats .c-bub.swarm .c-bgroup, .chats .c-bub.swarm .c-blabel, .chats .c-bub.swarm .c-dot { animation: c-fadein 0.3s ease-out both; animation-delay: calc(var(--sd, 0s) + 0.28s); }
+.chats.swarming .c-blur { animation: c-fadein 0.45s ease-out both; }
+.chats.swarming .c-btitle, .chats.swarming .c-close { animation: c-fadein 0.4s ease-out 0.15s both; }
+.chats.swarming .c-allbtn { animation: c-allbtn-rise 0.5s cubic-bezier(.2, .9, .3, 1.2) 0.35s both; }
+@keyframes c-allbtn-rise { from { transform: translate(-50%, 50px); opacity: 0; } }
+/* closing: they drift back into the corner */
+.chats.unswarming .c-bub .c-swarm { animation: c-swarm-in 0.42s cubic-bezier(.5, 0, .8, .4) forwards; animation-delay: var(--sd, 0s); }
+@keyframes c-swarm-in { to { transform: translate(var(--fx), var(--fy)) scale(0.15); opacity: 0; } }
+.chats.unswarming .c-blur, .chats.unswarming .c-btitle, .chats.unswarming .c-close { transition: opacity 0.35s; opacity: 0; }
+.chats.unswarming .c-allbtn { transition: transform 0.35s, opacity 0.35s; transform: translate(-50%, 50px); opacity: 0; }
+/* battery saver: quicker */
+body.saver-gfx .chats .c-bub.swarm .c-swarm { animation-duration: 0.38s; }
+body.saver-gfx .chats.unswarming .c-bub .c-swarm { animation-duration: 0.3s; }
+@media (prefers-reduced-motion: reduce) { .chats .c-bub.swarm .c-swarm, .chats.unswarming .c-bub .c-swarm, .chats.swarming .c-allbtn { animation: none !important; } }
