@@ -913,7 +913,9 @@ export class Letter {
   /** Every frame: keep the overlay glued to the paper, animate the circles. */
   update(dt = 0.016) {
     if (!this.visible) return;
-    this.water.draw();
+    // the friends' water rings: every frame, or ~10 times a second in battery saver
+    this._ringAcc = (this._ringAcc || 0) + dt;
+    if (this._ringAcc >= (this.ringInterval || 0)) { this._ringAcc = 0; this.water.draw(); }
     this.circles.update(dt);
     if (this.el.hidden) return;
     const r = this.seq.screenRect(), s = this.el.style;
