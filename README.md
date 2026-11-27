@@ -16,9 +16,8 @@ npm run build      # production build in dist/
 ## What's here
 
 - **Tilted view**: the camera looks down at the sea at 60° from the horizon (set with `pitch` in `main.js`; 90 = straight down). Drag to pan (the water stays under your finger), pinch or scroll to zoom; panning glides to a stop and stays inside the play area.
-- **360° view**: tap the **360°** button and drag to turn the view all the way round and tilt it; tap it again to ease back to the normal north-up view (its compass needle shows which way is north). Any time: twist two fingers on phones, right-drag / Shift+drag or Q / E on desktop.
 - **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
-- **Light on the water**: a sun path (gold at sunset, silver moonlight at night) of cartoon glints running from the viewer toward the sun in the north-north-east, so it shifts as the 360° view turns; the water deepens toward the far side of the view; the boat casts a soft shadow.
+- **Light on the water**: a sun path (gold at sunset, silver moonlight at night) of cartoon glints running from the viewer toward the sun in the north-north-east; the water deepens toward the far side of the view; the boat casts a soft shadow.
 - **Sea state colour**: storms turn the sea and sky grey-green and darker, dim the sun path and whip up foam. Night foam is kept quiet so the sea reads moonlit.
 - **Ocean colour** (Account settings): Deep Ocean (default), Tropical, Nordic or Pastel, applied on top of every time of day and remembered. Defined in `src/ocean/palettes.js` (`STYLES`).
 - **Time of day**: **Real time** by default (follows the device clock: dawn ~6:30, day 8:30–16:30, sunset ~18:30, dusk ~19:45, night from 21:00), or a **1-hour cycle** (dawn → night → dawn every hour), or **Manual** (picking a time or dragging the slider). The choice is remembered. Mapping in `src/core/Clock.js`.
@@ -53,7 +52,7 @@ src/
   fx/Post.js         bloom + ink outlines + colour grading + vignette
   audio/Ambience.js  generated waves / wind / music
   core/AutoQuality.js adaptive pixel ratio
-  core/TopDownControls.js tilted pan / zoom / 360° turn camera (pitch, default 60°)
+  core/TopDownControls.js tilted pan / zoom camera (pitch, default 60°)
   core/Clock.js      real clock → time of day
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings

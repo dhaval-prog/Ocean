@@ -208,7 +208,7 @@ window.addEventListener('pointercancel', endSteer);
 renderer.domElement.addEventListener('pointerdown', e => {
   if (steer || seq.active) return;
   pressed = true; rippleAt(e, 1);
-  if (e.isPrimary && e.button === 0 && !e.shiftKey) down = { x: e.clientX, y: e.clientY, t: performance.now() };
+  if (e.isPrimary && e.button === 0) down = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
 window.addEventListener('pointerup', e => {
   pressed = false;
@@ -268,34 +268,6 @@ function followBoat(dt) {
   controls.center.x += (tx - controls.center.x) * k;
   controls.center.z += (tz - controls.center.z) * k;
   controls.velocity.set(0, 0);
-}
-
-// --- 360° view -------------------------------------------------------------------
-// The button turns on look-around mode: a one-finger drag turns the view all the
-// way round and tilts it. Turning it off eases back to the normal north-up view.
-// Two-finger twist (phones), right-drag / Shift+drag and Q / E (desktop) turn it any time.
-const orbitBtn = document.getElementById('orbit');
-function setOrbit(on) {
-  controls.orbit = on;
-  orbitBtn.classList.toggle('on', on);
-  orbitBtn.setAttribute('aria-pressed', String(on));
-  orbitBtn.setAttribute('aria-label', on ? 'Leave 360° view and reset the camera' : '360° view: drag to look around');
-  if (!on) controls.resetView();
-}
-orbitBtn.addEventListener('click', e => { e.stopPropagation(); setOrbit(!controls.orbit); });
-const rotKeys = new Set();
-window.addEventListener('keydown', e => {
-  if (e.target.closest?.('input, button, textarea, select') || seq.active) return;
-  if (e.code === 'KeyQ' || e.code === 'KeyE') { rotKeys.add(e.code); e.preventDefault(); }
-});
-window.addEventListener('keyup', e => rotKeys.delete(e.code));
-window.addEventListener('blur', () => rotKeys.clear());
-let shownYaw = NaN;
-function updateOrbit(dt) {
-  if (rotKeys.size) controls.rotateBy(((rotKeys.has('KeyQ') ? 1 : 0) - (rotKeys.has('KeyE') ? 1 : 0)) * dt * 1.4);
-  ocean.uniforms.uViewDir.value.set(-Math.sin(controls.yaw), -Math.cos(controls.yaw));
-  const deg = Math.round(THREE.MathUtils.radToDeg(controls.yaw));
-  if (deg !== shownYaw) { shownYaw = deg; orbitBtn.style.setProperty('--yaw', deg + 'deg'); }
 }
 
 // --- slow drift when idle: the view floats in a lazy circle -----------------
@@ -373,7 +345,6 @@ renderer.setAnimationLoop(() => {
   drift(dt);
   followBoat(dt);
   controls.update(dt);
-  updateOrbit(dt);
   ocean.update(dt, elapsed);
   seq.update(dt, performance.now());
   letter.update();
