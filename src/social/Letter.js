@@ -618,30 +618,17 @@ export class Letter {
   }
 
   // --- sending ------------------------------------------------------------------
-  /** Everything on the letter, for painting onto the paper as it is sealed and folded. */
+  /** Everything on the letter, for painting onto the paper as it is folded or rolled. */
   _composition() {
     const W = this.seq.canvas.width, H = this.seq.canvas.height;
     let doodles = null;
     if (this.strokes.length) { doodles = document.createElement('canvas'); doodles.width = W; doodles.height = H; this._strokeAll(doodles.getContext('2d'), W, H, W * 0.008); }
-    const r = this.recipient;
     return {
       dear: this.dear, text: this.text.value.trim(), sign: this.sign, ink: this.inkCol, doodles,
       stickers: this.stickers.map(({ type, x, y, rot, scale }) => ({ type, x, y, rot, scale })),
       photo: this.photo ? { img: this.photo.img, x: this.photo.x, y: this.photo.y, rot: this.photo.rot } : null,
       voice: this.voice?.peaks?.length ? { peaks: this.voice.peaks, y: this.voice.y } : null,
-      seal: { color: r.color, initials: r.initials },
     };
-  }
-
-  /** The wax seal stamps on, in the recipient's colour with their initials. */
-  _stampSeal() {
-    const r = this.recipient, el = document.createElement('div');
-    el.className = 'seal';
-    el.style.setProperty('--seal', r.color);
-    el.innerHTML = `<svg viewBox="0 0 100 100"><path d="${sealPath()}"/><circle cx="50" cy="50" r="30"/></svg><b>${esc(r.initials)}</b>`;
-    this.deco.appendChild(el);
-    this.audio?.stamp();
-    setTimeout(() => this._tick(), 260);
   }
 
   _clear() {
@@ -650,19 +637,18 @@ export class Letter {
     this.strokes = []; this._redrawDoodles();
     this.photo?.el.remove(); this.photo = null;
     this.voice = null; this.voiceEl.hidden = true;
-    this.deco.querySelectorAll('.seal').forEach(s => s.remove());
     this._toggleTray(false);
     if (this.pen) this.el.querySelector('[data-tool=pen]').click();
   }
 
   /** Call when the sequence changes mode. */
   onMode(mode) {
-    const writing = mode === 'card' || mode === 'held' || mode === 'seal';
+    const writing = mode === 'card' || mode === 'held';
     const rowOn = writing || mode === 'shaping' || mode === 'fold' || mode === 'plane' || mode === 'bottle';
-    if (mode === 'shaping') {                                    // folding / rolling by hand: the letter goes onto the paper, sealed
+    if (mode === 'shaping') {                                    // folding / rolling by hand: the letter goes onto the paper
       this.text.blur(); this._toggleTray(false);
       this.seq.paint(this._composition()); this._shaped = true;
-      this.audio?.stamp();
+      this.audio?.rustle();
     }
     if (mode === 'card' && this._shaped) { this._shaped = false; this.seq.paint(); }   // unfolded again: back to writing on it
     if (writing && this.visible && this.el.hidden) { this.el.hidden = false; requestAnimationFrame(() => this._redrawDoodles()); }
@@ -675,8 +661,7 @@ export class Letter {
       requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); });
       this.circles.open();
     }
-    if (mode === 'seal') { this.text.blur(); this._toggleTray(false); this._stampSeal(); }   // the wax seal stamps on
-    if (mode === 'fold') this.seq.paint(this._composition());   // everything on the letter goes onto the paper as it folds
+    if (mode === 'fold') { this.text.blur(); this._toggleTray(false); this.seq.paint(this._composition()); }   // everything on the letter goes onto the paper as it folds
     if (!writing && this.el && !this.el.hidden) { this.el.hidden = true; this.text.blur(); }
     if (!rowOn && this.visible) {
       this.visible = false;
@@ -710,11 +695,4 @@ export class Letter {
     const vh = window.innerHeight;
     this.hint.style.top = Math.min(r.y + r.h + 12, vh - (this.hint.offsetHeight || 22) - 10) + 'px';
   }
-}
-
-/** A wavy-edged wax seal outline (100 × 100). */
-function sealPath() {
-  let d = '';
-  for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2, r = 44 + 3.5 * Math.sin(a * 9) + 1.5 * Math.sin(a * 5 + 1); d += (i ? 'L' : 'M') + (50 + r * Math.cos(a)).toFixed(1) + ' ' + (50 + r * Math.sin(a)).toFixed(1); }
-  return d + 'Z';
 }

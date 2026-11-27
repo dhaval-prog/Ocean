@@ -5,7 +5,7 @@
 //   - or a chosen style: parchment, wave-lined, starry or sakura
 //   - a mood adds a tint and a wavy border in its colour
 // paintPaper() also draws the finished letter (header, words, signature,
-// doodles, stickers, photo, voice note, seal) when it is sent.
+// doodles, stickers, photo, voice note) when it is sent.
 
 export const PAPER_STYLES = [
   { id: 'auto', name: 'Auto' },
@@ -68,7 +68,7 @@ function petal(g, x, y, s, rot) {
 
 /**
  * Paint the paper. look: { style, tod, rain, mood }; comp (optional, when the
- * letter is sent): { dear, text, sign, ink, font, doodles, stickers, photo, voice, seal }.
+ * letter is sent): { dear, text, sign, ink, font, doodles, stickers, photo, voice }.
  */
 export function paintPaper(g, w, h, look, grain, comp = null, images = {}) {
   const P = resolvePaper(look.style, look.tod, look.rain);
@@ -162,13 +162,5 @@ function drawLetter(g, w, h, c, images) {
     g.strokeStyle = c.ink; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath();
     for (let i = 0; i < n; i++) { const x = x0 + (x1 - x0) * i / (n - 1), a = (0.18 + v.peaks[i] * 0.82) * h * 0.035; g.lineTo(x, y + Math.sin(i * 0.9) * a); }
     g.stroke();
-  }
-  if (c.seal) {
-    const r = w * 0.075, x = w * 0.5, y = h * 0.8;
-    g.fillStyle = c.seal.color; g.beginPath();
-    for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2, rr = r * (1 + 0.07 * Math.sin(a * 9)); g.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); }
-    g.fill();
-    g.strokeStyle = 'rgba(0, 0, 0, 0.2)'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r * 0.72, 0, Math.PI * 2); g.stroke();
-    g.fillStyle = 'rgba(255, 255, 255, 0.85)'; g.font = `700 ${r * 0.75}px Georgia, serif`; g.textBaseline = 'middle'; g.fillText(c.seal.initials, x, y + 1);
   }
 }

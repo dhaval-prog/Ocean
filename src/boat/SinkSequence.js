@@ -4,16 +4,16 @@ import { paintPaper } from '../social/Stationery.js';
 // Click the boat → it sinks → a wet sheet of paper flutters up out of the
 // water like a leaf on the wind (dripping, drying as it rises), hovers in front
 // of you with a little bounce and settles onto the screen, breathing with the
-// waves. Sending (flick up / down, or Esc): a wax seal stamps on, then it
-// folds into a paper plane that flies to the chosen contact's circle (up) or
-// rolls into a bottle that drops into the sea (down); the boat bobs back up.
+// waves. Sending: it folds into a paper plane in 8 real folds and flies to
+// the chosen contact's circle, or rolls up from the bottom edge into a bottle
+// that drops into the sea; the boat bobs back up.
 // Adapted from the "sink → paper → catch → throw → re-form" sequence in the
 // Tugboat.html prototype.
 
 const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 // tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
-const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, seal: 0.8, fold: 0.7, plane: 1.3, bottle: 2.2, reform: 2.2 };
+const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -33,7 +33,7 @@ export class SinkSequence {
     this.images = {};
     this.t0 = 0;
 
-    this.geo = new THREE.PlaneGeometry(PW, PH, 18, 24);
+    this.geo = new THREE.PlaneGeometry(PW, PH, 72, 90);   // fine enough for crisp diagonal fold lines
     this.base = this.geo.attributes.position.array.slice();
     this.canvas = document.createElement('canvas');
     this.canvas.width = 640; this.canvas.height = Math.round(640 * PH / PW);
@@ -165,18 +165,18 @@ export class SinkSequence {
     if (this.shapeS >= 0.99) { this.sendKind = 'plane'; this._shape('plane', 1); this.setMode('plane'); }
     else if (this.shapeS <= -0.99) {
       this.sendKind = 'bottle'; this._splashed = false; this._shape('bottle', 1);
-      this.bottle.visible = true; this.bottle.scale.setScalar(1);
+      this.bottle.visible = true; this._placeBottle(1);
       this.setMode('bottle', this._now - 0.15 * DUR.bottle * 1000);          // already in its bottle: straight to the throw
     }
   }
 
-  /** Send the letter: 'plane' (flies to the contact's circle) or 'bottle' (drops into the sea). Starts with the wax seal. */
+  /** Send the letter: 'plane' (folds up and flies to the contact's circle) or 'bottle' (rolls up and drops into the sea). */
   send(kind = 'plane') {
     if (this.mode !== 'card' && this.mode !== 'held') return;
     this.sendKind = kind;
     this._fromP = this.paper.position.clone(); this._fromQ = this.paper.quaternion.clone();
     this.dom.style.cursor = '';
-    this.setMode('seal');
+    this.setMode('fold');
   }
 
   /** Send the paper into the sea in a screen direction (sx, sy: −1 … 1, y down) at `speed`. */
@@ -247,24 +247,94 @@ export class SinkSequence {
     a.needsUpdate = true;
   }
 
-  /** Morph the sheet: 0 = flat paper, 1 = folded into a paper plane (kind 'plane') or rolled into a scroll ('bottle'). */
-  _shape(kind, k) {
-    const a = this.geo.attributes.position, b = this.base;
-    for (let i = 0; i < a.count; i++) {
-      const x = b[i * 3], y = b[i * 3 + 1], u = x / (PW / 2), v = (y + PH / 2) / PH;   // u −1…1 across, v 0 (tail) … 1 (nose / top)
-      let tx, ty, tz;
-      if (kind === 'plane') {
-        const span = (PW / 2) * (1 - v) * 0.95 + 0.03, au = Math.abs(u);
-        if (au > 0.2) { tx = Math.sign(u) * (0.04 + (au - 0.2) / 0.8 * span); tz = (au - 0.2) * 0.12; }   // wings, slight dihedral
-        else { tx = u * 0.18; tz = -(0.2 - au) / 0.2 * 0.26 * (1 - v * 0.7); }                           // the keel folded down
-        ty = y * 0.8;
-      } else {
-        const th = u * Math.PI * 1.3, r = 0.19;                                                          // rolled up into a scroll
-        tx = r * Math.sin(th); tz = r * (1 - Math.cos(th)) - r; ty = y * 0.42;
+  /** Morph the sheet: 0 = flat paper, 1 = folded into a paper plane ('plane') or rolled up into a scroll ('bottle'). */
+  _shape(kind, k) { if (kind === 'plane') this._foldPlane(k); else this._rollUp(k); }
+
+  /**
+   * A classic paper dart in 8 folds (k 0 … 1, one eighth each), the paper
+   * facing you, nose at the top:
+   *   1 fold in half lengthwise and open it again (a crease)
+   *   2, 3 fold the top corners in to the centre line
+   *   4, 5 fold the new slanted edges in to the centre line again
+   *   6 fold it in half (the halves go back, away from you)
+   *   7, 8 fold each wing down, level
+   * Folds 1-5 are flat folds: the flap swings over toward you about its crease
+   * and lies on top. Each vertex is folded in order, so later folds carry the
+   * earlier flaps along.
+   */
+  _foldPlane(k) {
+    const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.13;
+    const st = i => Math.min(1, Math.max(0, k * 8 - i));                 // progress of fold i (0-based)
+    const e = i => { const x = st(i); return x * x * (3 - 2 * x); };
+    const s22 = Math.sin(Math.PI / 8), c22 = Math.cos(Math.PI / 8), r2 = Math.SQRT1_2;
+    // flat folds: [line point, line direction, which side moves (sign of cross)]
+    const flats = [
+      null,                                                               // 1: the crease (opened again)
+      [0, hh, -r2, -r2, -1], [0, hh, r2, -r2, 1],                         // 2, 3: top corners to the centre
+      [0, hh, -s22, -c22, -1], [0, hh, s22, -c22, 1],                     // 4, 5: slanted edges to the centre
+    ];
+    for (let n = 0; n < a.count; n++) {
+      let qx = b[n * 3], qy = b[n * 3 + 1], qz = 0, out = null;
+      // 1: fold the right half over to the left and open it again
+      const p1 = st(0);
+      if (p1 > 0 && p1 < 1 && qx > 0) { const th = Math.PI * 0.94 * Math.sin(Math.PI * p1); out = [qx * Math.cos(th), qy, qx * Math.sin(th)]; }
+      // 2-5: flat folds, each flap swinging over toward you onto the paper
+      for (let i = 1; i <= 4 && !out; i++) {
+        const p = st(i); if (p <= 0) break;
+        const [ax, ay, dx, dy, sgn] = flats[i];
+        const vx = qx - ax, vy = qy - ay, cr = dx * vy - dy * vx;
+        if (cr * sgn <= 0) continue;                                      // not on the moving side
+        const pr = vx * dx + vy * dy, px = vx - pr * dx, py = vy - pr * dy, pl = Math.hypot(px, py) || 1e-6;
+        if (p < 1) {                                                      // part-way: lifting about the crease
+          const th = Math.PI * e(i), cx = ax + pr * dx, cy = ay + pr * dy;
+          out = [cx + px * Math.cos(th), cy + py * Math.cos(th), qz + pl * Math.sin(th)];
+        } else { qx = ax + pr * dx - px; qy = ay + pr * dy - py; qz += 0.0035; }   // done: mirrored, on top
       }
-      a.setXYZ(i, x + (tx - x) * k, y + (ty - y) * k, (tz) * k);
+      // 6-8: fold in half (halves swing back), then each wing down
+      if (!out && st(5) > 0) {
+        const phi = e(5) * Math.PI / 2, side = qx >= 0 ? 1 : -1, u = Math.abs(qx), psi = side > 0 ? e(7) : e(6);
+        let X, Z;
+        if (u <= d || psi === 0) { X = side * u * Math.cos(phi); Z = -u * Math.sin(phi); }
+        else {
+          const fx = side * d * Math.cos(phi), fz = -d * Math.sin(phi), w = u - d;
+          let a1 = Math.atan2(-Math.sin(phi), side * Math.cos(phi)); if (side < 0 && a1 > 0) a1 -= 2 * Math.PI;
+          const al = a1 + ((side > 0 ? 0 : -Math.PI) - a1) * psi;
+          X = fx + w * Math.cos(al); Z = fz + w * Math.sin(al);
+        }
+        out = [X + side * qz * Math.sin(phi), qy, Z + qz * Math.cos(phi)];
+      }
+      if (!out) out = [qx, qy, qz];
+      a.setXYZ(n, out[0], out[1], out[2]);
     }
     a.needsUpdate = true;
+  }
+
+  /**
+   * Roll the letter up from its bottom edge toward the top (k 0 … 1): the rolled
+   * part is a tight spiral curling toward you, the rest stays flat. The sheet is
+   * kept centred, so the finished scroll sits where the letter was (its axis
+   * runs across the paper, along local x).
+   */
+  _rollUp(k) {
+    const a = this.geo.attributes.position, b = this.base, hh = PH / 2, R0 = 0.11, L = k * PH;
+    for (let n = 0; n < a.count; n++) {
+      const x = b[n * 3], y = b[n * 3 + 1], l = y + hh;                // distance from the bottom edge
+      let Y = y, Z = 0;
+      if (l < L) {                                                       // already rolled up
+        const arc = L - l, th = arc / R0, r = R0 * (1 - 0.07 * th / (2 * Math.PI));   // inner turns a little tighter
+        Y = -hh + L - r * Math.sin(th); Z = R0 - r * Math.cos(th);
+      }
+      a.setXYZ(n, x, Y - L / 2, Z - R0 * k);
+    }
+    a.needsUpdate = true;
+  }
+
+  /** The bottle round the scroll: same place, turned to lie along the scroll (local x). */
+  _placeBottle(scale) {
+    const P = this.paper, Bt = this.bottle;
+    Bt.position.copy(P.position);
+    Bt.quaternion.copy(P.quaternion).multiply(this._bottleTurn || (this._bottleTurn = new THREE.Quaternion().setFromAxisAngle(new V3(0, 0, 1), -Math.PI / 2)));
+    Bt.scale.setScalar(Math.max(0.01, scale) * 1.45);
   }
 
   _flatten() { this.geo.attributes.position.array.set(this.base); this.geo.attributes.position.needsUpdate = true; this.paper.scale.setScalar(1); }
@@ -356,7 +426,7 @@ export class SinkSequence {
       this._bend(t, 0.25 * Math.exp(-t * 4) + 0.02);
       this.wet.value = 0.25 * (1 - k);                                  // the last damp edges dry off
       if (k >= 1) { this.wet.value = 0; this.setMode('card', this.t0 + DUR.hover * 1000); }
-    } else if (this.mode === 'card' || this.mode === 'seal') {
+    } else if (this.mode === 'card') {
       // the paper breathes: it rises and falls gently with the waves under it, and
       // the corner nearest where you're typing lifts a little
       const tg = this._cardTarget(), sw = Math.sin(t * 1.1), sw2 = Math.sin(t * 0.7 + 1);
@@ -364,10 +434,6 @@ export class SinkSequence {
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.035, Math.sin(t * 0.9) * 0.04, Math.sin(t * 0.6) * 0.015)));
       this.lift.amt *= Math.exp(-dt * 1.6);
       this._bendCard(t);
-      if (this.mode === 'seal' && t >= DUR.seal) {           // the seal is on: fold it up
-        this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
-        this.setMode('fold', this.t0 + DUR.seal * 1000);
-      }
     } else if (this.mode === 'held') {
       const tg = this._cardTarget(), before = P.position.clone();
       P.position.lerp(this._held, 1 - Math.exp(-18 * dt));
@@ -387,25 +453,25 @@ export class SinkSequence {
       }
       const sv = this.shapeS, tg = this._cardTarget(), sw = Math.sin(t * 1.1) * (1 - Math.abs(sv) * 0.6);
       const up = new V3(0, 1, 0).applyQuaternion(tg.q);
-      P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0.12 * sv));
+      P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0));
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));
       const Bt = this.bottle;
-      if (sv > 0) { this._shape('plane', ease(sv)); Bt.visible = false; }
+      if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
       else if (sv < 0) {
         const roll = Math.min(1, -sv / 0.72), close = Math.max(0, (-sv - 0.72) / 0.28);   // roll up, then the bottle closes round it
-        this._shape('bottle', ease(roll));
+        this._shape('bottle', roll);
         Bt.visible = close > 0;
-        if (Bt.visible) { Bt.scale.setScalar(Math.max(0.01, backOut(close))); Bt.position.copy(P.position); Bt.quaternion.copy(P.quaternion); this._glass().opacity = 0.38; }
+        if (Bt.visible) { this._placeBottle(backOut(close)); this._glass().opacity = 0.38; }
       } else { this._bendCard(t); Bt.visible = false; }
     } else if (this.mode === 'fold') {
       // fold into a paper plane, or roll up into a scroll
-      const k = ease(Math.min(1, t / DUR.fold)), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      const k = Math.min(1, t / DUR.fold), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
       this._shape(this.sendKind, k);
-      P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : -0.15) * k);
+      P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : 0) * k);
       P.quaternion.copy(this._fromQ);
       if (t >= DUR.fold) {
         this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
-        if (this.sendKind === 'bottle') { this.bottle.visible = true; this.bottle.scale.setScalar(0.01); this._glass().opacity = 0.38; }
+        if (this.sendKind === 'bottle') { this.bottle.visible = true; this._placeBottle(0.01); this._glass().opacity = 0.38; }
         this.setMode(this.sendKind, this.t0 + DUR.fold * 1000);
       }
     } else if (this.mode === 'plane') {
@@ -431,9 +497,10 @@ export class SinkSequence {
       // a glass bottle closes round the scroll, drops into the sea, bobs and sinks away
       const k = Math.min(1, t / DUR.bottle), Bt = this.bottle, s = this.spot;
       const water = this.ocean.base;
-      const side = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));   // lying on its side on the water
+      const side = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0.4, 0));   // lying on the water (the scroll runs along local x)
+      let sc = 1;
       if (k < 0.15) {
-        Bt.scale.setScalar(Math.max(0.01, backOut(k / 0.15)));
+        sc = backOut(k / 0.15);
         P.position.copy(this._fromP);
       } else if (k < 0.55) {
         const f = (k - 0.15) / 0.4, end = s.clone().setY(water + 0.15);
@@ -446,7 +513,7 @@ export class SinkSequence {
         P.quaternion.copy(side).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(f * 7) * 0.15, 0, Math.sin(f * 5) * 0.1)));
         if (f > 0.55) this._glass().opacity = 0.38 * (1 - (f - 0.55) / 0.45);
       }
-      Bt.position.copy(P.position); Bt.quaternion.copy(P.quaternion);
+      this._placeBottle(sc);
       if (k >= 1) { this._splashed = false; Bt.visible = false; this.onSent?.('bottle'); this._arrive(); }
     } else if (this.mode === 'reform') {
       const k = Math.min(1, t / DUR.reform), b = backOut(k);
