@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Click the boat → it sinks → a wet sheet of paper flutters up out of the
 // water like a leaf on the wind (dripping, drying as it rises), hovers in front
-// of you with a little bounce and settles onto the screen. Drag and flick the paper (or press Esc)
+// of you with a little bounce and settles onto the screen. Drag and flick the paper up or down (or press Esc)
 // and it sails back into the sea, and the boat bobs back up.
 // Adapted from the "sink → paper → catch → throw → re-form" sequence in the
 // Tugboat.html prototype.
@@ -146,6 +146,13 @@ export class SinkSequence {
     if (this.mode !== 'card' && this.mode !== 'held') return;
     const fwd = new V3(0, 0, -1).applyQuaternion(this.camera.quaternion);
     this._startThrow(fwd.multiplyScalar(7).add(new V3(0, 2, 0)));
+  }
+
+  /** Send the paper into the sea in a screen direction (sx, sy: −1 … 1, y down) at `speed`. */
+  flick(sx, sy, speed = 9) {
+    if (this.mode !== 'card' && this.mode !== 'held') return;
+    const right = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+    this._startThrow(right.multiplyScalar(sx * speed).addScaledVector(up, -sy * speed));
   }
 
   _cardTarget() {
