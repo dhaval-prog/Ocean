@@ -269,7 +269,7 @@ export class Chats {
     this.el.className = 'chats page-' + page + (sheet ? ' sheet-mode' : '');
     this.el.innerHTML = sheet
       ? `<div class="c-sky" data-act="back" aria-hidden="true"></div>
-         <div class="c-sheet full${forward === true ? ' rise' : ''}">
+         <div class="c-sheet full${forward === true && !this._noRise ? ' rise' : ''}">
            <div class="c-grab" aria-hidden="true"><i></i></div><div class="c-page ${anim}">${html}</div></div>`
       : `<div class="c-page ${anim}">${html}</div>`;
     if (page === 'add') this._drawQR();
@@ -462,7 +462,12 @@ export class Chats {
 
   // --- interaction ----------------------------------------------------------------------
   _click(e) {
-    const a = e.target.closest('[data-act]'), chat = e.target.closest('[data-chat]');
+    const a = e.target.closest('[data-act]'), chat = e.target.closest('[data-chat]'), bub = e.target.closest('.c-bub');
+    if (bub) {                                                          // a bubble bursts, and its screen grows out of it
+      const page = chat ? 'thread' : bub.dataset.act;
+      this._burst(bub, () => this.go(page, chat?.dataset.chat));
+      return;
+    }
     if (chat) { this.go('thread', chat.dataset.chat); return; }
     if (!a) return;
     const act = a.dataset.act;
@@ -477,6 +482,35 @@ export class Chats {
     else if (act === 'share') this._share();
     else if (act === 'create') this._createGroup();
     else if (act === 'write') { const id = a.dataset.id; this.close(); this.onWrite?.(id); }
+  }
+
+  /** Pop a bubble: it swells and bursts into droplets, then the next screen grows from that spot. */
+  _burst(bub, then) {
+    if (this._bursting) return;
+    const r = bub.querySelector('.c-bglass').getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (this.reduce) { then(); return; }
+    this._bursting = true;
+    bub.classList.add('burst');
+    for (let k = 0; k < 12; k++) {
+      const d = document.createElement('i'), a = k / 12 * Math.PI * 2, dist = r.width * 0.55 + 18;
+      d.className = 'c-drop'; d.style.left = cx + 'px'; d.style.top = cy + 'px';
+      d.style.setProperty('--dx', (Math.cos(a) * dist).toFixed(1) + 'px'); d.style.setProperty('--dy', (Math.sin(a) * dist).toFixed(1) + 'px');
+      this.el.appendChild(d); setTimeout(() => d.remove(), 600);
+    }
+    try { navigator.vibrate?.(8); } catch {}
+    setTimeout(() => {
+      this._bursting = false;
+      this._noRise = true; then(); this._noRise = false;
+      const sh = this.el.querySelector('.c-sheet');
+      if (sh) {                                                         // a chat: the glass sheet grows out of the bubble
+        const b = sh.getBoundingClientRect();
+        sh.style.transformOrigin = `${cx - b.left}px ${cy - b.top}px`;
+        sh.classList.add('grow'); setTimeout(() => sh.classList.remove('grow'), 460);
+      } else {                                                          // New group / Add friend: the page opens out of it
+        this.el.style.setProperty('--ox', cx + 'px'); this.el.style.setProperty('--oy', cy + 'px');
+        this.el.classList.add('from-bubble'); setTimeout(() => this.el.classList.remove('from-bubble'), 420);
+      }
+    }, 200);
   }
 
   _toast(msg) {

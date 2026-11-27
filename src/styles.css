@@ -873,3 +873,20 @@ body.saver-gfx .chats .c-bub.waiting .c-bglass { animation: none; }
 .chats.page-all .c-row { animation: c-row-in 0.4s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--i, 0) * 0.04s); }
 .chats.page-all .c-end .c-when { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .chats.page-all .c-row { animation: none; } }
+
+/* --- bubbles screen: a still, blurred sea; × top right; cream buttons; bubbles burst open --- */
+.chats.page-list .c-sea { backdrop-filter: blur(9px) saturate(1.1) brightness(0.95); }
+.chats.page-list .c-close { left: auto; right: 16px; }
+.chats.page-list .c-btitle { left: 20px; right: 74px; }
+.chats .c-allbtn { background: #f5f3e2; color: #1b2113; text-shadow: none; box-shadow: 0 8px 22px rgba(0, 30, 60, 0.28); backdrop-filter: none; }
+.chats .c-allbtn i { background: #1f2717; color: #f5f3e2; }
+.chats .c-bub.action .c-bglass { background: #f5f3e2; box-shadow: 0 8px 18px rgba(0, 30, 60, 0.3); }
+.chats .c-bub.action .c-bglass::after { background: rgba(255, 255, 255, 0.9); }
+.chats .c-bub.action .c-bgroup { color: #1b2113; }
+.chats .c-bub.burst .c-wander { animation: c-burst 0.2s ease-out forwards; }
+@keyframes c-burst { to { transform: scale(1.35); opacity: 0; } }
+.chats .c-drop { position: fixed; z-index: 6; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: rgba(255, 255, 255, 0.95); box-shadow: 0 0 5px rgba(160, 220, 255, 0.9);
+  pointer-events: none; animation: c-drop 0.5s cubic-bezier(.2, .7, .4, 1) forwards; }
+@keyframes c-drop { to { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; } }
+.chats .c-sheet.grow { animation: c-grow 0.42s cubic-bezier(.2, .9, .3, 1); }
+@keyframes c-grow { from { transform: scale(0.1); opacity: 0.3; border-radius: 50%; } }
