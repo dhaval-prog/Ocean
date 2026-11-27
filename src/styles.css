@@ -462,11 +462,6 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 .letter .letter-text { -webkit-user-select: text; user-select: text; }   /* typing must keep working on iPhone */
 /* the friend the held plane is heading for */
 .person.aim .port { filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 4px rgba(120, 200, 255, 0.9)); transform: scale(1.08); transition: transform 0.15s, filter 0.15s; }
-/* drawing with the pen */
-.letter .pen-pill { position: absolute; z-index: 7; top: calc(var(--u) * 3); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
-  padding: 5px 6px 5px 12px; border-radius: 999px; background: rgba(30, 30, 60, 0.82); color: #fff; font: 600 12px/1 system-ui, sans-serif; white-space: nowrap; }
-.letter .pen-pill[hidden] { display: none; }
-.letter .pen-pill button { border: 0; border-radius: 999px; padding: 6px 10px; background: #fff; color: #2a2a55; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; }
 /* first letter: a finger shows drag down (plane) and drag up (bottle) */
 .letter .coach { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .letter .coach .finger { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px; border-radius: 50%;

@@ -14,6 +14,7 @@ const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 // tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
 // the folded plane, seen from above: nose up the screen, tipped a little away from you
+const BOTTLE_SCALE = 0.66;   // the rolled scroll and its bottle shrink so the whole bottle fits the screen
 const PLANE_TILT = Math.PI / 3, PLANE_SCALE = 0.72, DIHEDRAL = 0.24;   // nose 60° away from you: you see its back, the T of wings and keel
 /** How far the plane has tipped away (radians) at fold progress k: the paper faces you for the first folds, then the nose dips away. */
 const planeTilt = k => 0.12 * k + (PLANE_TILT - 0.12) * smoothstep(0.62, 1, k);
@@ -413,7 +414,7 @@ export class SinkSequence {
     const P = this.paper, Bt = this.bottle;
     Bt.position.copy(P.position);
     Bt.quaternion.copy(P.quaternion).multiply(this._bottleTurn || (this._bottleTurn = new THREE.Quaternion().setFromAxisAngle(new V3(0, 0, 1), -Math.PI / 2)));
-    Bt.scale.setScalar(Math.max(0.01, scale) * 1.45);
+    Bt.scale.setScalar(Math.max(0.01, scale) * 1.45 * P.scale.x);      // sized to the scroll inside it
   }
 
   _flatten() { this._shade(false); this.geo.attributes.position.array.set(this.base); this.geo.attributes.position.needsUpdate = true; this.paper.scale.setScalar(1); }
@@ -548,7 +549,7 @@ export class SinkSequence {
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 + gFl, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv + gYaw : 0)));   // a plane dips its nose away from you
       if (sv > 0) P.quaternion.multiply(planeQ(sv, 0.55 * this._bank + gRoll));   // nose away, turned over, banking about its nose (steer right: left wing up)
       const Bt = this.bottle;
-      P.scale.setScalar(1 - (1 - PLANE_SCALE) * Math.max(0, sv));                       // the folded plane sits comfortably on screen
+      P.scale.setScalar(sv >= 0 ? 1 - (1 - PLANE_SCALE) * sv : 1 - (1 - BOTTLE_SCALE) * Math.min(1, -sv / 0.72));   // the plane / the bottle fit comfortably on screen
       if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
       else if (sv < 0) {
         const roll = Math.min(1, -sv / 0.72), close = Math.max(0, (-sv - 0.72) / 0.28);   // roll up, then the bottle closes round it
@@ -562,7 +563,8 @@ export class SinkSequence {
       this._shape(this.sendKind, k);
       P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : 0) * k);
       P.quaternion.copy(this._fromQ);
-      if (this.sendKind === 'plane') { P.quaternion.multiply(planeQ(k)); P.scale.setScalar(1 - (1 - PLANE_SCALE) * k); }   // tilts back as it folds
+      if (this.sendKind === 'plane') { P.quaternion.multiply(planeQ(k)); P.scale.setScalar(1 - (1 - PLANE_SCALE) * k); }
+      else P.scale.setScalar(1 - (1 - BOTTLE_SCALE) * k);
       if (t >= DUR.fold) {
         this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
         if (this.sendKind === 'bottle') { this.bottle.visible = true; this._placeBottle(0.01); this._glass().opacity = 0.38; }
