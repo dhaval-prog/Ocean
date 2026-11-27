@@ -19,6 +19,7 @@ import { Spray } from './weather/Spray.js';
 import { Lightning } from './weather/Lightning.js';
 import { Hail } from './weather/Hail.js';
 import { Waterspout } from './weather/Waterspout.js';
+import { Clouds } from './weather/Clouds.js';
 import './styles.css';
 
 const app = document.getElementById('app');
@@ -61,6 +62,8 @@ const weather = new Weather();
 const lightning = new Lightning();
 const hail = new Hail();
 const spout = new Waterspout();
+const clouds = new Clouds();
+scene.add(clouds.mesh);
 const sparkles = new Spray('#fff2b8', 1.3);          // magic sparkles (rainbow, sunbeams)
 scene.add(lightning.group, hail.points, spout.mesh, sparkles.points);
 // lightning lights up the sky behind the sea too
@@ -113,7 +116,7 @@ function applyLook() {
   const dim = 1 - W.clouds * 0.22 - W.rain * 0.08;
   for (const l of lights) l.intensity = l.userData.base * (ocean.light * dim + weather.flash * 0.4);
   const theme = '#' + ocean.uniforms.uPalB.value[1].getHexString();
-  if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); }
+  if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); root.style.setProperty('--sea', theme); }
 }
 
 // --- UI -----------------------------------------------------------------------
@@ -162,7 +165,7 @@ weather.onThunder = (delay, strength, near) => {
   const bx = boat.position.x, bz = boat.position.y, d = Math.hypot(x - bx, z - bz);
   if (d < 5) { const k = 5 / Math.max(d, 0.01); x = bx + (x - bx) * k; z = bz + (z - bz) * k; }   // never on the boat
   ocean.uniforms.uFlashPos.value.set(x, z);
-  lightning.strike(x, ocean.base, z, near);
+  lightning.strike(x, ocean.base, z, near, near ? clouds.boltSource(x, z) : null);   // out of the storm cloud above
   if (near) {
     ocean.addRipple(x, z, 1); setTimeout(() => ocean.addRipple(x + 0.3, z - 0.2, 0.8), 180);
     spray.burst(x, z, ocean.base, 45, 1.1);
@@ -461,13 +464,14 @@ function applySize() {
   sparkles.setScale(H * pixelRatio, camera.fov);
 }
 function resize() {
-  W = app.clientWidth || 1; H = app.clientHeight || 1;
+  const cv = renderer.domElement;                 // the canvas can be taller than #app (it reaches under the toolbar)
+  W = cv.clientWidth || app.clientWidth || 1; H = cv.clientHeight || app.clientHeight || 1;
   camera.aspect = W / H;
   camera.fov = W < H ? 62 : 40; // portrait phones need a wider view to see enough sea
   camera.updateProjectionMatrix();
   applySize();
 }
-new ResizeObserver(resize).observe(app);
+const ro = new ResizeObserver(resize); ro.observe(app); ro.observe(renderer.domElement);
 resize();
 
 const quality = new AutoQuality({
@@ -536,6 +540,10 @@ renderer.setAnimationLoop(() => {
   sparkles.update(dt, { bow: null, heading: 0, speed01: 0, rough: 0, water: ocean.base });
   hail.update(elapsed, { center: controls.center, hail: weather.hail, windDir: weather.windDir, wind: W.wind, pixelRatio, light: ocean.light });
   updateBeams(dt); updateRainbow(); updateSpout(dt);
+  clouds.update(dt, { center: controls.center, halfW: controls.worldPerPixel() * renderer.domElement.clientWidth / 2, cover: W.clouds, storm: W.thunder, fog: W.fog,
+    windDir: weather.windDir, wind: W.wind, light: ocean.light, sky: skyNow, camera, pitch: controls.pitch,
+    boat: boat.ready && boat.group.visible ? { x: boat.position.x, y: ocean.base + 0.8, z: boat.position.y } : null });
+  clouds.shadows(ocean.uniforms.uCloudBlobs.value);
   // the boat in the weather: wind, window lights, searchlight, foghorn
   boat.setWind(weather.windDir, W.wind);
   const gloom = Math.max(W.fog, W.thunder, W.rain * W.clouds * 0.8);
@@ -557,4 +565,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, clouds, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };

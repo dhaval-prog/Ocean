@@ -23,7 +23,7 @@ npm run build      # production build in dist/
   - **Rain**: thin motion-blurred streaks of varied length and brightness, slanted by the wind, falling in sheets that sweep across; under them the water goes darker and pitted, with small rings of different sizes; mist cuts the visibility; rain hiss.
   - **Storm**: lightning bolts strike the sea: a jagged, forked, glowing bolt comes down from the storm into the water (never on the boat), the water lights up around the hit, rings spread and spray flies up. Each strike flickers in 2–4 strokes, brightest under the strike (close strikes crack almost at once, distant ones are dim glows with a late rumble), darker faster cloud shadows, grey-green sea, foam blown into streaks along the wind, heavy rain and mist, big waves.
   - **Fog**: the water fades into soft grey-white with distance in uneven banks that drift with the wind; the sun is a diffuse glow instead of glitter.
-  - **Clouds**: soft-edged shadows (two layers); Clear → Overcast dulls and greys the colours and hides the sun glitter. The stylised wind lines give way to rain and fog.
+  - **Clouds**: thick, puffy cartoon clouds (cel-shaded puffs with ink rims, like the boat's smoke) drift between the camera and the sea in cloudy weather, each with its shadow straight below it; in a storm they hang low and dark and the lightning comes out of them; fog hides them; they turn see-through where they cover the boat. Plus soft-edged far cloud shadows (two layers); Clear → Overcast dulls and greys the colours and hides the sun glitter. The stylised wind lines give way to rain and fog.
   - **Extras**: a rainbow after a good shower (daytime, not in rain or fog) with a smooth spectrum, a faint secondary bow and the darker band between, sea spray off the bow in rough water at speed, and one wind direction that turns the waves and foam, the smoke and the wind streaks together.
   - **Colour by time of day**: rain drops, rings and spray are pink-gold at dawn, silver by day, amber at sunset, lavender at dusk and moonlit blue at night; lightning is warmer at sunset, violet-white at dusk, blue-white at night (and so is the patch of sea it lights); fog glows pink-peach at dawn, gold at sunset (with the sun as a big soft disc) and blue-silver at night (with a halo round the moon). At night rain rings sparkle cyan, and a lightning flash makes the whole sea and every glowing wake and ring flare.
   - **Sunbeams**: on cloudy days, after showers and as sunset light breaks into a storm, patches of sunlight drift across the water. Sail into one and the water glows gold round the boat (soft chime). After a shower the sun breaks through in a big sweep, then the rainbow appears.
@@ -72,6 +72,7 @@ src/
   weather/Lightning.js lightning bolts
   weather/Hail.js    hail bursts
   weather/Waterspout.js waterspout
+  weather/Clouds.js  puffy cartoon clouds
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings
   boat/Smoke.js      funnel smoke puffs (one batch)

@@ -12,6 +12,7 @@ uniform float uClouds; uniform float uCloudT; uniform float uRain; uniform float
 uniform float uFlash; uniform float uRainbow; uniform float uThunder; uniform vec2 uFlashPos;
 uniform vec3 uFlashCol; uniform vec3 uRainCol; uniform vec2 uRainbowPos; uniform float uRainbowS; uniform float uBowMoon;
 uniform vec4 uBeams[3]; uniform vec4 uSpot; uniform float uBoatGlow;
+uniform vec4 uCloudBlobs[8];   // the puffy clouds overhead: x, z, radius, shadow strength
 // where rain falls heaviest: broad sheets sweeping downwind (same formula as Rain.js)
 float rainSheet(vec2 p, vec2 w, float t){ vec2 wp = vec2(-w.y, w.x);
   return clamp(0.5 + 0.5*sin(dot(p, wp)*0.11 - t*0.35)*sin(dot(p, w)*0.07 - t*0.5 + 1.3) + 0.25*sin(dot(p, w)*0.031 + dot(p, wp)*0.023 - t*0.21), 0.0, 1.0); }
@@ -55,7 +56,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       if (R.w <= 0.0 || age < 0.0 || age > 2.0) continue;
       vec2 dv = p - R.xy; float r = length(dv);
       float front = age*0.8, width = 0.14 + age*0.14;          // slow, narrow packet: 2-3 rings, ~2 units across
-      float env = exp(-pow((r - front*0.75)/width, 2.0)) * exp(-age*1.2) * R.w;                                    // fades within ~2 s
+      float ew = (r - front*0.75)/width; float env = exp(-ew*ew) * exp(-age*1.2) * R.w;                                    // fades within ~2 s
       float wave = sin((r - front)*16.0) * env * smoothstep(front + 0.12, front, r);  // nothing ahead of the front
       rH += wave;
       rDisp += (dv/max(r, 1e-3)) * wave * 0.06;                                   // only a slight bend
@@ -212,6 +213,12 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float cs2 = smoothstep(0.45, 0.7, oc_fbm(cp*0.45 + uWind*uCloudT*0.003 + 7.0)) * (0.3 + uClouds*0.5);
     float cShade = clamp(cs*(0.45 + uThunder*0.25) + cs2*0.3, 0.0, 0.85);
     c = mix(c, c*vec3(0.74, 0.84, 0.92)*(1.0 - uThunder*0.25), cShade*(1.0 - fx.z*0.8));
+    // shadows straight below the puffy clouds overhead
+    for (int i = 0; i < 8; i++) {
+      vec4 Cb = uCloudBlobs[i]; if (Cb.w <= 0.001) continue;
+      float cd = length((p - Cb.xy)*vec2(1.0, 1.3))/Cb.z + (oc_noise(p*0.3 + float(i)*3.1) - 0.5)*0.3;
+      c *= 1.0 - smoothstep(1.0, 0.5, cd)*Cb.w*0.35*(1.0 - fx.z*0.7);
+    }
 
     // camera-relative frame, measured in camera heights so it holds at any zoom
     vec2 rel = vWPos.xz - cameraPosition.xz;
@@ -235,7 +242,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     {
       float along = dot(rel, uLightDir) / camH;
       float across = dot(rel, vec2(-uLightDir.y, uLightDir.x)) / camH;
-      float band = exp(-pow(across / (0.1 + max(along, 0.0)*0.22), 2.0)) * smoothstep(0.15, 0.9, along);
+      float bw = across / (0.1 + max(along, 0.0)*0.22); float band = exp(-bw*bw) * smoothstep(0.15, 0.9, along);
       // glints: short crisp dashes lying across the path (cartoon sun glitter),
       // staggered and jittered so they never read as a grid, each popping on and off
       vec2 lw = vec2(dot(p, vec2(-uLightDir.y, uLightDir.x)), dot(p, uLightDir)) + warp*0.8;
@@ -360,6 +367,8 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     float dist = max(abs(vLP.x), abs(vLP.y));
     c = mix(c, mix(pal[9], pal[1], 0.22), smoothstep(uHalf*0.6, uHalf - uFade*0.3, dist) * 0.9);
 
-    diffuseColor.rgb = c * 0.12;   // lit + emissive below ≈ the palette colour, not brighter
+    // never let an invalid value (NaN) out: one bad pixel would be spread over the
+    // whole screen by the bloom pass (iPhone GPUs turn that white)
+    diffuseColor.rgb = clamp(c, 0.0, 4.0) * 0.12;   // lit + emissive below ≈ the palette colour, not brighter
     diffuseColor.a = smoothstep(uHalf, uHalf - uFade, dist);
   }`;
