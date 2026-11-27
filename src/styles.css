@@ -890,3 +890,12 @@ body.saver-gfx .chats .c-bub.waiting .c-bglass { animation: none; }
 @keyframes c-drop { to { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; } }
 .chats .c-sheet.grow { animation: c-grow 0.42s cubic-bezier(.2, .9, .3, 1); }
 @keyframes c-grow { from { transform: scale(0.1); opacity: 0.3; border-radius: 50%; } }
+
+/* leaving a chat opened from its bubble: the sheet shrinks back into that spot, the bubble re-forms */
+.chats .c-sheet.shrink { animation: c-shrink 0.36s cubic-bezier(.55, 0, .75, .3) forwards; }
+@keyframes c-shrink { to { transform: scale(0.06); opacity: 0.35; border-radius: 50%; } }
+.chats .c-sky.fade { transition: opacity 0.3s; opacity: 0; }
+.chats .c-bub.reform .c-bglass { animation: c-bub-reform 0.6s cubic-bezier(.3, 1.6, .5, 1); }
+.chats .c-bub.reform .c-blabel { animation: c-fadein 0.4s ease-out 0.2s both; }
+@keyframes c-bub-reform { 0% { transform: scale(0.2); opacity: 0.4; } 55% { transform: scale(1.15, 0.9); opacity: 1; } 80% { transform: scale(0.95, 1.06); } 100% { transform: scale(1); } }
+@keyframes c-fadein { from { opacity: 0; } }
