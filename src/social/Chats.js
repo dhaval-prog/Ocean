@@ -57,13 +57,24 @@ export class Chats {
     this.data = this._load();
     this.code = this._myCode();
 
-    // the round chat button, bottom right of the ocean
+    // the chat button, bottom right of the ocean: a glass bubble floating over the sea (all CSS
+    // animation): it wobbles and drifts, its shine glides, a rainbow sheen sweeps across now and then,
+    // three dots pulse inside and tiny bubbles rise from it; a new letter sends up a burst; a tap pops it
     this.btn = document.createElement('button');
     this.btn.type = 'button'; this.btn.className = 'chats-btn';
     this.btn.setAttribute('aria-label', 'Chats');
-    this.btn.innerHTML = `${IC.chat}<span class="badge" hidden></span>`;
-    this.btn.addEventListener('click', e => { e.stopPropagation(); this.open(); });
+    this.btn.innerHTML = `
+      <span class="gb-float"><span class="gb-body">
+        <span class="gb-glass"></span><span class="gb-sheen"></span>
+        <span class="gb-shine"><i class="gb-hl"></i><i class="gb-hl2"></i></span>
+        <span class="gb-dots"><i></i><i></i><i></i></span>
+      </span></span>
+      <span class="gb-rise" aria-hidden="true"></span><span class="badge" hidden></span>`;
+    this.btn.addEventListener('click', e => { e.stopPropagation(); this._popOpen(); });
     root.appendChild(this.btn);
+    this.rise = this.btn.querySelector('.gb-rise');
+    this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.saver = false; this._riseIn = 1; this._unreadAt = 0; this._unread = null;
 
     this.el = document.createElement('section');
     this.el.className = 'chats'; this.el.hidden = true;
@@ -78,6 +89,60 @@ export class Chats {
 
   get isOpen() { return !this.el.hidden; }
 
+  /** Night: the rim, shine and rising bubbles glow softly in the sea's foam colour. */
+  setColors(hi, mid, deep, foam, light) {
+    this.btn.classList.toggle('night', light < 0.45);
+    this.btn.style.setProperty('--gb-glow', `rgb(${foam.join(',')})`);
+  }
+
+  /** Battery saver: only the drift and an occasional rising bubble keep going. */
+  setSaver(on) { this.saver = on; this.btn.classList.toggle('saver', on); }
+
+  /** Every frame from the app: tiny bubbles rise now and then; a new letter sends up a burst. */
+  update(dt) {
+    if (this.btn.hidden || this.reduce) return;
+    if ((this._unreadAt -= dt) <= 0) {
+      this._unreadAt = 0.5;
+      const n = this.friends.reduce((s, f) => s + (f.unread || 0), 0);
+      if (this._unread != null && n > this._unread) this._newLetter();
+      if (n !== this._unread) { this._unread = n; this._badge(); }
+    }
+    if ((this._riseIn -= dt) <= 0) {                        // more often while letters are waiting
+      this._riseIn = (this.saver ? 3.2 : this._unread ? 1.1 : 2.1) * (0.7 + Math.random() * 0.6);
+      this._riseOne();
+    }
+  }
+
+  _riseOne(delay = 0) {
+    const b = document.createElement('i'), s = 3 + Math.random() * 4;
+    b.style.cssText = `--s:${s.toFixed(1)}px;--x:${(Math.random() * 14 - 4).toFixed(1)}px;--sway:${(Math.random() * 10 - 5).toFixed(1)}px;--t:${(1.9 + Math.random() * 0.9).toFixed(2)}s;animation-delay:${delay}s`;
+    this.rise.appendChild(b); setTimeout(() => b.remove(), (3 + delay) * 1000);
+  }
+
+  /** A new letter: a burst of bubbles, a bigger wobble, the count pops. */
+  _newLetter() {
+    for (let k = 0; k < 4; k++) this._riseOne(k * 0.12);
+    const body = this.btn.querySelector('.gb-body'); body.classList.remove('boing'); void body.offsetWidth; body.classList.add('boing');
+    const b = this.btn.querySelector('.badge'); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  }
+
+  /** Tap: the bubble pops in a ring of droplets and the chats open from there. */
+  _popOpen() {
+    if (this.reduce) { this.open(); this.el.classList.add('fade-in'); return; }
+    if (this.btn.classList.contains('popping')) return;
+    this.btn.classList.add('popping');
+    for (let k = 0; k < 10; k++) {
+      const d = document.createElement('i'), a = k / 10 * Math.PI * 2; d.className = 'gb-drop';
+      d.style.setProperty('--dx', (Math.cos(a) * 34).toFixed(1) + 'px'); d.style.setProperty('--dy', (Math.sin(a) * 34).toFixed(1) + 'px');
+      this.btn.appendChild(d); setTimeout(() => d.remove(), 600);
+    }
+    try { navigator.vibrate?.(8); } catch {}
+    const r = this.btn.getBoundingClientRect();
+    this.el.style.setProperty('--ox', (r.left + r.width / 2) + 'px'); this.el.style.setProperty('--oy', (r.top + r.height / 2) + 'px');
+    setTimeout(() => { this.btn.classList.remove('popping'); this.open(); this.el.classList.add('from-bubble'); }, 190);   // the page grows out of the bubble
+  }
+
+
   open(page = 'list', arg) {
     this.el.hidden = false; this.btn.hidden = true;
     document.body.classList.add('chats-open');
@@ -89,6 +154,7 @@ export class Chats {
   close() {
     this._stopScan();
     this.el.hidden = true; this.btn.hidden = false;
+    if (!this.reduce) { const body = this.btn.querySelector('.gb-body'); body.classList.remove('reform'); void body.offsetWidth; body.classList.add('reform'); }   // a fresh bubble forms
     document.body.classList.remove('chats-open');
     this.stack = [];
     this.onOpenChange?.(false);
