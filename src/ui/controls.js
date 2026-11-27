@@ -22,7 +22,7 @@ const WX_MODES = [
  */
 const MODES = [
   { id: 'realtime', name: 'Real time', hint: 'Follows your clock' },
-  { id: 'cycle', name: '1-hour cycle', hint: 'Dawn to night every hour' },
+  { id: 'cycle', name: '2-hour cycle', hint: 'Dawn to night every 2 hours: 24 min each, with clear, cloudy, rain, storm and fog in turn (about 5 min each)' },
   { id: 'manual', name: 'Manual', hint: 'Pick a time below' },
 ];
 

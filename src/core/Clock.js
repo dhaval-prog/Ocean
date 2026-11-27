@@ -27,5 +27,20 @@ export function todFromClock(date = new Date()) {
 /** "14:05" in the device's locale. */
 export const clockLabel = (date = new Date()) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-/** A full Dawn → Night → Dawn cycle in one hour: time-of-day units per second. */
-export const HOUR_CYCLE_RATE = 5 / 3600;
+/** The 2-hour cycle: Dawn → Day → Sunset → Dusk → Night → Dawn in 120 minutes,
+ *  24 minutes for each time of day (time-of-day units per second). */
+export const CYCLE_MINUTES = 120;
+export const CYCLE_RATE = 5 / (CYCLE_MINUTES * 60);
+
+/** Weather order inside each time of day in the 2-hour cycle (4.8 minutes each). */
+export const CYCLE_WEATHER = ['clear', 'cloudy', 'rain', 'storm', 'fog'];
+
+/**
+ * Which weather the 2-hour cycle has at time of day `tod` (0 … 5). Each time of
+ * day is the stretch centred on its whole number (Day = 0.5 … 1.5), and that
+ * stretch is split into equal parts, one per weather.
+ */
+export function cycleWeather(tod) {
+  const seg = (((tod + 0.5) % 5) + 5) % 5;              // 0 … 5, whole numbers = start of a time of day
+  return CYCLE_WEATHER[Math.min(CYCLE_WEATHER.length - 1, Math.floor((seg - Math.floor(seg)) * CYCLE_WEATHER.length))];
+}

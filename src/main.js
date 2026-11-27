@@ -6,7 +6,7 @@ import { Post } from './fx/Post.js';
 import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
 import { TopDownControls } from './core/TopDownControls.js';
-import { todFromClock, clockLabel, HOUR_CYCLE_RATE } from './core/Clock.js';
+import { todFromClock, clockLabel, CYCLE_RATE, cycleWeather } from './core/Clock.js';
 import { Boat } from './boat/Boat.js';
 import { Marker } from './boat/Marker.js';
 import { Smoke } from './boat/Smoke.js';
@@ -146,7 +146,10 @@ try {
     if (PRESETS[w.preset]) weather.setPreset(w.preset);
     else if (w.custom) { weather.setPreset('clear'); Object.assign(weather.target, w.custom); weather.preset = 'custom'; weather.name = 'Custom'; }
   } else if (w?.mode === 'local') weather.setMode('local');
+  else if (w?.mode === 'cycle' || (!w && state.mode === 'cycle')) weather.mode = 'cycle';
 } catch {}
+if (weather.mode === 'cycle' && state.mode !== 'cycle') weather.mode = 'auto';
+if (weather.mode === 'cycle') { weather.setMode('cycle'); weather.followCycle(cycleWeather(state.tod)); }
 if (params.has('weather') && PRESETS[params.get('weather')]) weather.setPreset(params.get('weather')); // e.g. ?weather=storm
 if (weather.mode === 'auto') weather.setMode('auto');
 Object.assign(weather.cur, weather.target);                      // start in the chosen weather, no glide
@@ -277,10 +280,13 @@ function showTod() {
 }
 const ui = createControls(document.getElementById('panel'), {
   initial: { tod: state.tod, mode: state.mode, style: state.style, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef },
-  onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; ocean.setTimeOfDay(v); applyLook(); saveTod(); },
+  onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; if (weather.mode === 'cycle') weather.setMode('auto'); ocean.setTimeOfDay(v); applyLook(); saveTod(); },
   onMode: m => {
     state.mode = m;
     if (m === 'realtime') state.tod = todFromClock();
+    // the 2-hour cycle brings its own weather (each time of day: clear, cloudy, rain, storm, fog in turn)
+    if (m === 'cycle') weather.setMode('cycle');
+    else if (weather.mode === 'cycle') weather.setMode('auto');
     ocean.setTimeOfDay(state.tod); applyLook(); showTod(); saveTod();
   },
   onStyle: id => {
@@ -497,11 +503,12 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.1, timer.getDelta());
   elapsed += dt;
   if (state.mode !== 'manual') {
-    if (state.mode === 'cycle') state.tod = (state.tod + dt * HOUR_CYCLE_RATE) % 5;
+    if (state.mode === 'cycle') state.tod = (state.tod + dt * CYCLE_RATE) % 5;
     else state.tod = todFromClock();
     ocean.setTimeOfDay(state.tod);
     if ((todLabelAt -= dt) <= 0) { todLabelAt = 1; showTod(); if (state.mode === 'cycle') saveTod(); }
   }
+  if (weather.mode === 'cycle') weather.followCycle(cycleWeather(state.tod));   // 2-hour cycle: weather in step with the time of day
   weather.update(dt);
   ocean.setWeather(weather, dt);
   applyLook();
