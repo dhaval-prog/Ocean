@@ -52,8 +52,8 @@ export class Chats {
    * root: the app element; friends: the demo people; onWrite(id): write a letter to that friend
    * on the ocean; onOpenChange(open): the chats screen opened / closed.
    */
-  constructor({ root, friends, onWrite, onOpenChange }) {
-    this.friends = friends; this.onWrite = onWrite; this.onOpenChange = onOpenChange;
+  constructor({ root, friends, onWrite, onOpenChange, onRead }) {
+    this.friends = friends; this.onWrite = onWrite; this.onOpenChange = onOpenChange; this.onRead = onRead;
     this.data = this._load();
     this.code = this._myCode();
 
@@ -166,11 +166,21 @@ export class Chats {
   /** Show a page (list, group, add, thread, scan) on top of the current one. */
   go(page, arg, replace = false) {
     if (replace) this.stack = [];
+    if (page === 'thread') this._markRead(arg);
     this.stack.push({ page, arg });
     this._render(true);
   }
 
+  /** Opening a chat reads its letters: the count goes, and its bubble will be small. */
+  _markRead(id) {
+    const f = this.friends.find(x => x.id === id);
+    if (f?.unread) { f.unread = 0; this._unread = null; this._badge(); this.onRead?.(id); }
+  }
+
   back() {
+    const cur = this.stack.at(-1), prev = this.stack.at(-2);
+    // a chat opened from its bubble shrinks back into that spot and turns into its (now small) bubble again
+    if (cur?.page === 'thread' && prev?.page === 'list' && this._origin?.id === cur.arg && !this.reduce) { this._shrinkBack(); return; }
     if (this.stack.at(-1)?.page === 'scan') this._stopScan();
     if (this.stack.length <= 1) { this.close(); return; }
     this.stack.pop();
@@ -338,8 +348,15 @@ export class Chats {
       const sp = 5 + Math.random() * 5, th = Math.random() * Math.PI * 2;
       b.vx = Math.cos(th) * sp; b.vy = Math.sin(th) * sp; b.ph = Math.random() * 10;
     });
+    const F = this._focus; this._focus = null;
+    const fb = F && items.find(b => b.el.dataset.chat === F.id);
+    if (fb) {
+      const fr = field.getBoundingClientRect();
+      fb.x = F.x - fr.left; fb.y = F.y - fr.top; fb.pinned = true;
+    }
     this._bubs = { items, W, H };
     for (let k = 0; k < 120; k++) this._bubStep(0, true);
+    if (fb) { fb.pinned = false; fb.el.classList.add('reform'); setTimeout(() => fb.el.classList.remove('reform'), 700); }
     this._bubPlace();
   }
 
@@ -364,8 +381,8 @@ export class Chats {
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       const a = items[i], b = items[j], dx = b.x - a.x, dy = (b.y - a.y) * 0.8, d = Math.hypot(dx, dy) || 0.01, min = a.r + b.r + 40;   // each bubble and its name below count as one tall shape
       if (d < min) {
-        const push = (min - d) / 2, nx = dx / d, ny = dy / d;
-        a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+        const nx = dx / d, ny = dy / d, wa = a.pinned ? 0 : b.pinned ? 2 : 1, wb = b.pinned ? 0 : a.pinned ? 2 : 1, push = (min - d) / 2;
+        a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * wb; b.y += ny * push * wb;   // a pinned bubble stays put
         if (!relax) { const k = 0.5; a.vx -= nx * k * 6; a.vy -= ny * k * 6; b.vx += nx * k * 6; b.vy += ny * k * 6; }
       }
     }
@@ -484,10 +501,28 @@ export class Chats {
     else if (act === 'write') { const id = a.dataset.id; this.close(); this.onWrite?.(id); }
   }
 
+  _shrinkBack() {
+    if (this._shrinking) return;
+    const sh = this.el.querySelector('.c-sheet'), o = this._origin;
+    if (!sh) { this.stack.pop(); this._render(false); return; }
+    this._shrinking = true;
+    const r = sh.getBoundingClientRect();
+    sh.style.transformOrigin = `${o.cx - r.left}px ${o.cy - r.top}px`;
+    sh.classList.remove('grow', 'rise'); sh.classList.add('shrink');
+    this.el.querySelector('.c-sky')?.classList.add('fade');
+    setTimeout(() => {
+      this._shrinking = false;
+      this.stack.pop();
+      this._focus = { id: o.id, x: o.cx, y: o.cy };                    // its bubble re-forms where the chat went
+      this._render(null);
+    }, 360);
+  }
+
   /** Pop a bubble: it swells and bursts into droplets, then the next screen grows from that spot. */
   _burst(bub, then) {
     if (this._bursting) return;
     const r = bub.querySelector('.c-bglass').getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    this._origin = bub.dataset.chat ? { id: bub.dataset.chat, cx, cy } : null;
     if (this.reduce) { then(); return; }
     this._bursting = true;
     bub.classList.add('burst');

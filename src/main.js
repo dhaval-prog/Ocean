@@ -105,6 +105,10 @@ const letter = new Letter({ root: app, seq, hint: seqHint });
 // chats (round button, bottom right): people, groups, add a friend; "Letter" writes to them on the ocean
 chats = new Chats({
   root: app, friends: FRIENDS,
+  onRead: id => {                                                  // read in a chat: the count leaves their circle too
+    const i = letter.recipients.findIndex(p => p.id === id);
+    letter.people[i]?.querySelector('.badge.unread')?.remove();
+  },
   onWrite: id => {
     const i = letter.recipients.findIndex(p => p.id === id);
     if (i >= 0) letter.select(i);
