@@ -61,6 +61,11 @@ export class Ocean {
       // weather (set by the app from Weather each frame)
       uClouds: { value: 0 }, uCloudT: { value: 0 }, uRain: { value: 0 }, uFog: { value: 0 }, uFogCol: { value: new THREE.Color('#dfe6ea') },
       uFlash: { value: 0 }, uRainbow: { value: 0 }, uThunder: { value: 0 }, uFlashPos: { value: new THREE.Vector2() },
+      uFlashCol: { value: new THREE.Color('#e8f0ff') }, uRainCol: { value: new THREE.Color('#e4ecf4') },
+      uRainbowPos: { value: new THREE.Vector2() }, uRainbowS: { value: 28 }, uBowMoon: { value: 0 },
+      uBeams: { value: Array.from({ length: 3 }, () => new THREE.Vector4(0, 0, 1, 0)) },   // sunbeams through the clouds: x, z, radius, strength
+      uSpot: { value: new THREE.Vector4(0, 0, 1, 0) },                                        // boat searchlight on the water: x, z, radius, strength
+      uBoatGlow: { value: 0 },                                                                // gold glow round the boat in a sunbeam
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });
@@ -88,6 +93,7 @@ export class Ocean {
     this.look = { petals: 0, specks: 0, glints: 0, night: 0 };
     this._ripple = 0;
     this._tmp = new THREE.Color();
+    this.fogTint = new THREE.Color('#dfe6ea');
     this.style = 'deep';
     this.setTimeOfDay(1);
   }
@@ -103,6 +109,10 @@ export class Ocean {
     U.uFxA.value.set(...TIMES[i].fx); U.uFxB.value.set(...TIMES[j].fx);
     U.uMix.value = k; // the shader eases and sweeps far → near
     U.uLightCol.value.set(TIMES[i].sun[0]).lerp(this._tmp.set(TIMES[j].sun[0]), e);
+    // weather tinted by the light: rain, lightning and fog colours for this time
+    U.uRainCol.value.set(TIMES[i].wx.rain).lerp(this._tmp.set(TIMES[j].wx.rain), e);
+    U.uFlashCol.value.set(TIMES[i].wx.bolt).lerp(this._tmp.set(TIMES[j].wx.bolt), e);
+    this.fogTint.set(TIMES[i].wx.fog).lerp(this._tmp.set(TIMES[j].wx.fog), e);
     U.uRefl.value = TIMES[i].sun[1] + (TIMES[j].sun[1] - TIMES[i].sun[1]) * e;
     this.skyColor.set(A[9]).lerp(this._tmp.set(B[9]), e);
     this.skyTopColor.set(A[2]).lerp(this._tmp.set(B[2]), e).lerp(this.skyColor, 0.55);
@@ -124,8 +134,14 @@ export class Ocean {
   setWeather(wx, dt) {
     const U = this.uniforms, c = wx.cur;
     this.storm = c.storm; this.foam = c.foam;
-    U.uClouds.value = c.clouds; U.uRain.value = c.rain; U.uFog.value = c.fog; U.uThunder.value = c.thunder;
-    U.uFlash.value = wx.flash; U.uRainbow.value = wx.rainbow * Math.max(0, (this.light - 0.5) / 0.5) * (1 - c.rain) * (1 - c.fog);   // needs sun, no rain or fog
+    U.uClouds.value = c.clouds; U.uFog.value = c.fog; U.uThunder.value = c.thunder;
+    U.uFlash.value = wx.flash;
+    // rainbow needs sun and no rain or fog; on rare clear nights it is a pale moonbow
+    const day = Math.max(0, (this.light - 0.5) / 0.5), night = THREE.MathUtils.clamp((0.5 - this.light) / 0.2, 0, 1);
+    const moon = wx.moonbow ? night * (c.clouds < 0.55 ? 1 : 0) * 0.7 : 0;
+    U.uRainbow.value = wx.rainbow * Math.max(day, moon) * (1 - c.rain) * (1 - c.fog);
+    U.uBowMoon.value = day > moon ? 0 : 1;
+    U.uRain.value = Math.max(c.rain, wx.hail * 0.9);          // hail pocks the water too
     U.uCloudT.value += dt * (1 + c.storm * 2 + c.thunder * 3);    // clouds race in a thunderstorm
     U.uWind.value.set(wx.windDir[0], wx.windDir[1]);
   }

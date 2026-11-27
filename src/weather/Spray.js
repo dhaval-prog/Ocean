@@ -26,7 +26,8 @@ void main() {
 }`;
 
 export class Spray {
-  constructor() {
+  constructor(color = '#f4fbff', size = 1) {
+    this.sizeMul = size;
     this.pos = new Float32Array(MAX * 3); this.size = new Float32Array(MAX); this.alpha = new Float32Array(MAX);
     this.drops = Array.from({ length: MAX }, () => ({ age: 1, life: 1, p: new THREE.Vector3(), v: new THREE.Vector3(), s: 0.1 }));
     this.next = 0; this.acc = 0;
@@ -35,14 +36,18 @@ export class Spray {
     this.sizeAttr = new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
     this.alphaAttr = new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('position', this.posAttr); geo.setAttribute('aSize', this.sizeAttr); geo.setAttribute('aAlpha', this.alphaAttr);
-    this.uniforms = { uScale: { value: 600 }, uColor: { value: new THREE.Color('#f4fbff') } };
+    this.uniforms = { uScale: { value: 600 }, uColor: { value: new THREE.Color(color) } };
     this.points = new THREE.Points(geo, new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: this.uniforms, transparent: true, depthWrite: false }));
     this.points.frustumCulled = false;
     this.points.renderOrder = 31;
   }
 
   setScale(bufferHeight, fovDeg) { this.uniforms.uScale.value = bufferHeight / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2)); }
-  setLight(light) { this.uniforms.uColor.value.setRGB(0.55 + 0.45 * light, 0.62 + 0.38 * light, 0.75 + 0.25 * light); }
+  /** light 0 … 1; tint: spray takes the colour of the light (same as the rain) */
+  setLight(light, tint = null) {
+    if (tint) this.uniforms.uColor.value.copy(tint).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.6 + 0.4 * light);
+    else this.uniforms.uColor.value.setRGB(0.55 + 0.45 * light, 0.62 + 0.38 * light, 0.75 + 0.25 * light);
+  }
 
   /** A splash thrown up all around a point on the water (e.g. a lightning strike). */
   burst(x, z, water, n = 40, power = 1) {
@@ -72,7 +77,7 @@ export class Spray {
       d.age += dt; d.v.y -= 9 * dt; d.p.addScaledVector(d.v, dt);
       const k = d.age / d.life;
       this.pos.set([d.p.x, Math.max(d.p.y, water), d.p.z], i * 3);
-      this.size[i] = d.s * (1 - k * 0.4); this.alpha[i] = (1 - k) * 0.85;
+      this.size[i] = d.s * this.sizeMul * (1 - k * 0.4); this.alpha[i] = (1 - k) * 0.85;
     }
     this.posAttr.needsUpdate = this.sizeAttr.needsUpdate = this.alphaAttr.needsUpdate = true;
   }

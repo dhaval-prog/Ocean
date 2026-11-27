@@ -62,13 +62,14 @@ export class Rain {
     this.points.renderOrder = 12;
   }
 
-  update(elapsed, { center, rain, wind, windDir, pixelRatio, light }) {
+  update(elapsed, { center, rain, wind, windDir, pixelRatio, light, tint = null }) {
     const U = this.uniforms;
     U.uTime.value = elapsed; U.uCenter.value.copy(center); U.uPx.value = pixelRatio;
     U.uRain.value = rain;
     U.uWind.value.set(windDir[0], windDir[1]).multiplyScalar(0.4 + wind);
     U.uSlant.value = -windDir[0] * (0.15 + wind * 0.35);   // screen x follows world x (north-up view)
-    U.uColor.value.setRGB(0.72 + 0.2 * light, 0.78 + 0.17 * light, 0.86 + 0.12 * light);   // grey-white, not blue
+    if (tint) U.uColor.value.copy(tint).multiplyScalar(0.8 + 0.2 * light);                 // tinted by the time of day
+    else U.uColor.value.setRGB(0.72 + 0.2 * light, 0.78 + 0.17 * light, 0.86 + 0.12 * light);
     this.points.visible = rain > 0.01;
   }
 }

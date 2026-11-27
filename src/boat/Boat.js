@@ -41,6 +41,31 @@ export class Boat {
     this._wake = 0;
     this._fy = 0; this._fp = 0; this._fr = 0; this._floatInit = false;   // smoothed wave height / pitch / roll
     this._glass = null;
+    // weather reactions
+    this.windDir = [1, 0]; this.windStrength = 0;   // set by the app: headwind slows, tailwind surfs
+    this.agitation = 0;                              // 0 … 1: rocks harder after a close lightning strike
+    this._kick = 0; this._kickT = 9; this._kickSign = 1; this._strike = null; this._flicker = 0;
+    this._lightLevel = 0;                            // window glow 0 … 1
+    this._search = 0; this._searchWant = 0;          // searchlight 0 … 1
+    this.spot = { x: 0, z: 0, r: 1, i: 0 };          // where the searchlight lands on the water
+  }
+
+  /** Wind from the weather: world direction [x, z] (unit) and strength 0 … 1. */
+  setWind(dir, strength) { this.windDir = dir; this.windStrength = strength; }
+
+  /** Searchlight wanted (0 … 1), e.g. in a storm or fog. */
+  setSearchlight(v) { this._searchWant = v; }
+
+  /** A lightning strike landed close at (x, z): the boat jolts, rocks hard and its lights flicker. */
+  jolt(x, z, strength = 1) {
+    this.agitation = Math.min(1, this.agitation + strength);
+    this._kick = 0.28 * strength; this._kickT = 0;
+    // heel away from the strike
+    const ch = Math.cos(this.heading), sh = Math.sin(this.heading);
+    const side = (x - this.position.x) * -sh + (z - this.position.y) * -ch;   // >0: strike to port
+    this._kickSign = side > 0 ? -1 : 1;
+    this._strike = { x, z };
+    this._flicker = 1.6;
   }
 
   async load(url = '/models/tugboat.glb') {
@@ -84,6 +109,23 @@ export class Boat {
     this.funnel.position.copy(FUNNEL_TOP).multiply(BULK).multiplyScalar(MODEL_SCALE);
     this.funnel.position.y -= WATERLINE * MODEL_SCALE * BULK.y;
     this.body.add(this.funnel);
+    // searchlight on the cabin roof: a soft cone of light (additive) that sweeps
+    // side to side in storms and fog; where it meets the sea the ocean shader
+    // draws a warm pool of light (see this.spot)
+    const cone = new THREE.ConeGeometry(1.5, 9, 24, 1, true);
+    cone.translate(0, -4.5, 0); cone.rotateZ(Math.PI / 2);          // apex at the lamp, pointing along +x
+    this.searchBeam = new THREE.Mesh(cone, new THREE.ShaderMaterial({
+      uniforms: { uI: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: 'varying vec2 vUv; varying float vRim; void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vec3 n = normalize(normalMatrix*normal); vRim = abs(dot(n, normalize(-mv.xyz))); gl_Position = projectionMatrix*mv; }',
+      fragmentShader: 'uniform float uI; varying vec2 vUv; varying float vRim; void main(){ float along = 1.0 - vUv.y; float a = pow(1.0 - along, 1.4)*vRim*vRim*0.32*uI; gl_FragColor = vec4(vec3(1.0, 0.94, 0.78)*a, a); }',
+    }));
+    this.searchBeam.renderOrder = 36;
+    this.searchPivot = new THREE.Object3D();
+    this.searchPivot.position.set(0.9, 1.35, 0);
+    this.searchPivot.add(this.searchBeam);
+    this.searchPivot.visible = false;
+    this.body.add(this.searchPivot);
+    this._o = new THREE.Vector3(); this._dir = new THREE.Vector3();
     this.ready = true;
     return this;
   }
@@ -131,8 +173,30 @@ export class Boat {
     } else {
       this.speed += (0 - this.speed) * Math.min(1, dt * 1.2);
     }
-    this.position.x += Math.cos(this.heading) * this.speed * dt;
-    this.position.y -= Math.sin(this.heading) * this.speed * dt;
+    // wind: a headwind holds the boat back, a tailwind lets it surf along
+    // faster, and it drifts slowly downwind (more in a gale)
+    const fx = Math.cos(this.heading), fz = -Math.sin(this.heading);
+    const along = fx * this.windDir[0] + fz * this.windDir[1];          // +1 tailwind … −1 headwind
+    const assist = this.speed > 0 ? 1 + along * this.windStrength * 0.35 : 1;
+    this.position.x += fx * this.speed * assist * dt;
+    this.position.y += fz * this.speed * assist * dt;
+    if (!this.frozen) {
+      const drift = this.windStrength * this.windStrength * 0.35;
+      this.position.x += this.windDir[0] * drift * dt; this.position.y += this.windDir[1] * drift * dt;
+    }
+
+    // after a close strike: rocks hard, then settles; steering away from the
+    // strike calms it much faster
+    if (this.agitation > 0) {
+      let calm = 0.22;
+      if (this._strike && this.speed > 0.5) {
+        const awayX = this.position.x - this._strike.x, awayZ = this.position.y - this._strike.z;
+        if (fx * awayX + fz * awayZ > 0) calm = 0.75;
+      }
+      this.agitation = Math.max(0, this.agitation - calm * dt);
+    }
+    this._kickT += dt;
+    this._flicker = Math.max(0, this._flicker - dt);
 
     // --- floating: ride the actual waves. Sample the water under the bow,
     // stern and both sides: the hull rises and falls with the surface, pitches
@@ -156,17 +220,34 @@ export class Boat {
     this._fy += (heave - this._fy) * k; this._fp += (wavePitch - this._fp) * k; this._fr += (waveRoll - this._fr) * k;
     const sp = Math.abs(this.speed) / this.maxSpeed;
     // its own swell rocking on top (always a little, a lot in a storm)
-    const rockA = 0.07 + storm * 0.07, heaveA = 0.06 + storm * 0.1;
+    const ag = this.agitation, rockA = (0.07 + storm * 0.07) * (1 + ag * 2.2), heaveA = (0.06 + storm * 0.1) * (1 + ag * 1.5);
+    const kick = this._kick * Math.exp(-this._kickT * 2.2) * Math.cos(this._kickT * 6.5) * this._kickSign;   // the jolt: heel over, swing back
     // shudder: engine vibration when running + chop slapping the hull in a storm
     const shake = 0.006 * sp * Math.sin(t * 31) + storm * 0.012 * (Math.sin(t * 7.3) + Math.sin(t * 11.7 + 1.3)) * 0.5;
     this.group.position.set(px, this._fy + Math.sin(t * 1.6) * heaveA + shake * 0.5, pz);
     this.group.rotation.y = this.heading;
-    this.body.rotation.x = this._fr + Math.sin(t * 1.1) * rockA + Math.sin(t * 2.3 + 0.7) * rockA * 0.35 + turn * 0.1 * sp + shake;  // roll
+    this.body.rotation.x = this._fr + Math.sin(t * 1.1) * rockA + Math.sin(t * 2.3 + 0.7) * rockA * 0.35 + turn * 0.1 * sp + shake + kick;  // roll
     this.body.rotation.z = this._fp + Math.sin(t * 1.3 + 1.0) * rockA * 0.8 + 0.05 * (Math.max(0, this.speed) / this.maxSpeed) + shake * 0.7; // pitch
     // sinking / resurfacing (SinkSequence)
     this.group.position.y += this.sinkY;
     this.body.rotation.x += this.sinkRoll;
     this.body.rotation.z -= this.sinkPitch;
+
+    // window lights (flicker after a strike) and the sweeping searchlight
+    const flick = this._flicker > 0 ? (Math.random() < 0.35 ? 0.1 : 1) : 1;
+    if (this._glass) this._glass.emissiveIntensity = this._lightLevel * 2.2 * flick;
+    this._search += (this._searchWant - this._search) * Math.min(1, dt * 1.5);
+    if (this.searchPivot) {
+      const on = this._search * flick;
+      this.searchPivot.visible = on > 0.02;
+      this.searchPivot.rotation.set(0, Math.sin(t * 0.55) * 0.95, -0.2, 'YZX');   // sweeps side to side, angled down
+      this.searchBeam.material.uniforms.uI.value = on;
+      this.searchPivot.updateWorldMatrix(true, false);
+      const o = this._o.setFromMatrixPosition(this.searchPivot.matrixWorld);
+      const d = this._dir.set(1, 0, 0).transformDirection(this.searchPivot.matrixWorld);
+      const k = THREE.MathUtils.clamp((o.y - this.ocean.base) / Math.max(-d.y, 0.05), 2, 10);
+      this.spot.x = o.x + d.x * k; this.spot.z = o.z + d.z * k; this.spot.r = 1.4 + k * 0.22; this.spot.i = on;
+    }
 
     // soft shadow under the hull; fades as it sinks, gone while hidden
     this.ocean.uniforms.uBoatShadow.value = this.group.visible ? THREE.MathUtils.clamp(1 + this.sinkY / 1.2, 0, 1) : 0;
@@ -190,5 +271,5 @@ export class Boat {
   }
 
   /** Warm window glow at night (0 … 1). */
-  setNight(n) { if (this._glass) this._glass.emissiveIntensity = n * 2.2; }
+  setNight(n) { this._lightLevel = n; }
 }

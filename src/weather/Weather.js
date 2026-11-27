@@ -5,7 +5,8 @@
 //   wx.setPreset('rain');               // manual: Clear, Cloudy, Rain, Storm, Fog
 //   wx.update(dt);                      // every frame
 //   wx.cur → { storm, foam, clouds, rain, fog, thunder, wind } (smoothed, 0 … 1)
-//   wx.flash (0 … 1 lightning), wx.rainbow (0 … 1), wx.windDir (unit [x, z])
+//   wx.flash (0 … 1 lightning), wx.rainbow (0 … 1), wx.windDir (unit [x, z]),
+//   wx.hail (0 … 1, a rare 10 s burst in heavy rain), wx.moonbow (rainbow is a moonbow at night)
 //
 // Values glide toward their targets: quickly when you pick a preset, slowly
 // (tens of seconds) when the weather changes by itself.
@@ -39,7 +40,9 @@ export class Weather {
     this.cur = { ...PRESETS.clear };
     this.name = 'Clear';
     this.status = '';               // short status line for the panel (local weather)
-    this.flash = 0; this.rainbow = 0;
+    this.flash = 0; this.rainbow = 0; this.hail = 0; this.moonbow = false;
+    this._hailLeft = 0; this._hailCheck = 40;
+    this.onSunbreak = null;         // after a shower: the sun breaks through (then the rainbow)
     this.windAngle = Math.atan2(0.35, 1); // radians in the x/z plane (toward +x, a little south)
     this._windTarget = this.windAngle;
     this.windDir = [Math.cos(this.windAngle), Math.sin(this.windAngle)];
@@ -110,11 +113,27 @@ export class Weather {
 
     // rainbow after rain: once a good shower eases off
     this._rainPeak = Math.max(this._rainPeak * Math.exp(-dt / 120), this.cur.rain);
-    if (this._rainPeak > 0.35 && this.cur.rain < 0.12 && this.cur.clouds < 0.75 && this.cur.fog < 0.3 && this._rainbowLeft <= 0) { this._rainbowLeft = 110; this._rainPeak = 0; }
+    if (this._rainPeak > 0.35 && this.cur.rain < 0.12 && this.cur.clouds < 0.75 && this.cur.fog < 0.3 && this._rainbowLeft <= 0) {
+      this._rainbowLeft = 110; this._rainPeak = 0;
+      this.moonbow = Math.random() < 0.45;               // at night only some showers leave a moonbow
+      this.onSunbreak?.();
+    }
     this._rainbowLeft = Math.max(0, this._rainbowLeft - dt);
     const want = this._rainbowLeft > 0 ? Math.min(1, this._rainbowLeft / 20) : 0;
     this.rainbow += (want - this.rainbow) * Math.min(1, dt * 0.3);
+
+    // hail: now and then, in heavy rain, a short burst of hail
+    if (this.cur.rain > 0.5 && this._hailLeft <= 0 && (this._hailCheck -= dt) <= 0) {
+      this._hailCheck = 50 + Math.random() * 40;
+      if (Math.random() < 0.22) this._hailLeft = 10;
+    }
+    this._hailLeft = Math.max(0, this._hailLeft - dt);
+    const hw = this._hailLeft > 0 && this.cur.rain > 0.2 ? 1 : 0;
+    this.hail += (hw - this.hail) * Math.min(1, dt * 1.8);
   }
+
+  /** Start a hail burst now (10 s). */
+  triggerHail() { this._hailLeft = 10; }
 
   _auto(dt) {
     if ((this._autoLeft -= dt) > 0) return;

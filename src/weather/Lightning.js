@@ -83,6 +83,12 @@ export class Lightning {
     this.hit = hit;
   }
 
+  /** Bolt colour for the time of day: violet-white at dusk, blue-white at night, warmer at sunset. */
+  setColor(c) {
+    this.core.material.uniforms.uColor.value.copy(c).multiplyScalar(3.3);
+    this.glow.material.uniforms.uColor.value.copy(c).lerp(new THREE.Color(0.45, 0.55, 1.0), 0.45).multiplyScalar(1.6);
+  }
+
   /** Every frame: rebuild the camera-facing ribbons; intensity follows the flash (0 … 1). */
   update(camera, intensity) {
     const on = intensity > 0.02 && this.paths.length;

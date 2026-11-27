@@ -62,6 +62,17 @@ export class Ambience {
       src.connect(flt); flt.connect(gg); gg.connect(this.rain);
     }
 
+    // hail: a dry rattle of tiny random clicks
+    const cbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), cd = cbuf.getChannelData(0);
+    for (let n = 0; n < 900; n++) {
+      const at = Math.floor(Math.random() * (cd.length - 400)), amp = 0.3 + Math.random() * 0.7;
+      for (let i = 0; i < 300; i++) cd[at + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / 40);
+    }
+    this.hail = ctx.createGain(); this.hail.gain.value = 0; this.hail.connect(this.master);
+    { const src = ctx.createBufferSource(); src.buffer = cbuf; src.loop = true; src.start();
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+      src.connect(hp); hp.connect(this.hail); }
+
     // music bus: lowpass + feedback delay for a soft, spacious pad
     this.music = ctx.createGain(); this.music.gain.value = 0.11;
     const mlp = ctx.createBiquadFilter(); mlp.type = 'lowpass'; mlp.frequency.value = 1600;
@@ -157,6 +168,35 @@ export class Ambience {
     src.start(t, Math.random() * 3); src.stop(t + dur + 1);
   }
 
+  /** A foghorn: a long, deep, two-tone blast. */
+  foghorn() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain(); out.gain.value = 0;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520;
+    out.connect(lp); lp.connect(this.master);
+    out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.34, t + 0.35);
+    out.gain.setValueAtTime(0.34, t + 2.4); out.gain.linearRampToValueAtTime(0, t + 3.3);
+    for (const [f, type, g] of [[98, 'sawtooth', 0.5], [147, 'square', 0.18], [49, 'sine', 0.6]]) {
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = f;
+      o.frequency.setValueAtTime(f * 0.97, t); o.frequency.linearRampToValueAtTime(f, t + 0.4);   // the blast settles onto pitch
+      const gg = ctx.createGain(); gg.gain.value = g; o.connect(gg); gg.connect(out); o.start(t); o.stop(t + 3.4);
+    }
+  }
+
+  /** Little magic moments: 'rainbow' (rising bell arpeggio) or 'sun' (soft shimmer). */
+  chime(kind = 'rainbow') {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const notes = kind === 'rainbow' ? [72, 76, 79, 83, 84, 88] : [79, 84, 88];
+    notes.forEach((n, i) => {
+      const t = t0 + i * (kind === 'rainbow' ? 0.11 : 0.18), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = hz(n);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(kind === 'rainbow' ? 0.09 : 0.06, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      o.connect(g); g.connect(this.music); o.start(t); o.stop(t + 2.4);
+    });
+  }
+
   setMuted(m) {
     this.muted = m;
     if (!this.ctx) return;
@@ -165,12 +205,13 @@ export class Ambience {
     this.master.gain.setTargetAtTime(m ? 0 : 0.8, t, 0.4);
   }
 
-  update(storm, night, rain = 0, wind = storm) {
+  update(storm, night, rain = 0, wind = storm, hail = 0) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.waves.gain.setTargetAtTime(0.45 + storm * 0.6, t, 0.5);
     this.wind.gain.setTargetAtTime(0.03 + Math.max(storm, wind) * 0.22, t, 0.5);
     this.rain.gain.setTargetAtTime(rain * 0.9, t, 0.8);
+    this.hail.gain.setTargetAtTime(hail * 0.7, t, 0.4);
     this.music.gain.setTargetAtTime(0.11 - storm * 0.05 + night * 0.02, t, 1);
   }
 }
