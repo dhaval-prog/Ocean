@@ -9,6 +9,15 @@ const CHORDS = [
   [48, 55, 60, 64], // C
 ];
 const PENTA = [72, 74, 76, 79, 81, 84];
+// the letter's mood changes the music: chords, how often they change, how often bells ring, scale
+const MOOD_MUSIC = {
+  none:   { chords: CHORDS, every: 8000, bell: 0.55, bells: PENTA, shift: 0 },
+  miss:   { chords: [[57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 65], [52, 55, 59, 62]], every: 9500, bell: 0.35, bells: [69, 72, 74, 76, 79], shift: 0 },
+  thanks: { chords: [[60, 64, 67, 72], [65, 69, 72, 76], [67, 71, 74, 79], [60, 64, 67, 71]], every: 6500, bell: 0.7, bells: [72, 76, 79, 84, 88], shift: 0 },
+  night:  { chords: [[41, 48, 53, 57], [43, 50, 55, 59], [38, 45, 50, 53], [36, 43, 48, 52]], every: 12000, bell: 0.2, bells: [64, 67, 69, 72], shift: 0 },
+  love:   { chords: [[62, 66, 69, 73], [59, 62, 66, 69], [55, 59, 62, 66], [57, 61, 64, 68]], every: 8500, bell: 0.5, bells: [74, 76, 78, 81, 83], shift: 0 },
+  cheer:  { chords: [[60, 64, 67, 69], [62, 65, 69, 72], [64, 67, 71, 74], [65, 69, 72, 76]], every: 5000, bell: 0.8, bells: [76, 79, 81, 84, 86], shift: 0 },
+};
 const hz = n => 440 * Math.pow(2, (n - 69) / 12);
 
 export class Ambience {
@@ -96,8 +105,9 @@ export class Ambience {
     this.setEngine(this._engineLevel ?? 0);
 
     this._chord = 0;
+    this._mm = this._mm || MOOD_MUSIC.none;
     const playChord = () => {
-      const t = ctx.currentTime, notes = CHORDS[this._chord++ % CHORDS.length];
+      const t = ctx.currentTime, set = this._mm.chords, notes = set[this._chord++ % set.length];
       for (const n of notes) for (const [type, det] of [['triangle', -4], ['sine', 5]]) {
         const o = ctx.createOscillator(), g = ctx.createGain();
         o.type = type; o.frequency.value = hz(n); o.detune.value = det;
@@ -107,12 +117,77 @@ export class Ambience {
     };
     const playBell = () => {
       const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = hz(PENTA[Math.floor(Math.random() * PENTA.length)]);
+      const bells = this._mm.bells;
+      o.type = 'sine'; o.frequency.value = hz(bells[Math.floor(Math.random() * bells.length)]);
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.06, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 3);
       o.connect(g); g.connect(this.music); o.start(t); o.stop(t + 3.2);
     };
+    this._playChord = playChord; this._playBell = playBell;
     playChord();
-    this._timers = [setInterval(playChord, 8000), setInterval(() => Math.random() < 0.55 && playBell(), 2300)];
+    this._schedule();
+  }
+
+  _schedule() {
+    (this._timers || []).forEach(clearInterval);
+    const m = this._mm;
+    this._timers = [setInterval(this._playChord, m.every), setInterval(() => Math.random() < m.bell && this._playBell(), 2300)];
+  }
+
+  /** The letter's mood: 'none', 'miss', 'thanks', 'night', 'love', 'cheer' - shifts the music. */
+  setMood(id) {
+    this._mm = MOOD_MUSIC[id] || MOOD_MUSIC.none;
+    if (!this.ctx) return;
+    this._chord = 0; this._playChord(); this._schedule();
+  }
+
+  _noiseHit(dur, filterType, freq, q, gain, when = 0) {
+    if (!this.ctx || this.muted || !this._whiteBuf) return;
+    const ctx = this.ctx, t = ctx.currentTime + when;
+    const s = ctx.createBufferSource(); s.buffer = this._whiteBuf;
+    const f = ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + Math.min(0.01, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.05);
+  }
+
+  /** Writing: a soft pen scratch per key (a little different each time). */
+  scratch() {
+    const now = performance.now(); if (now - (this._scr || 0) < 35) return; this._scr = now;
+    this._noiseHit(0.05 + Math.random() * 0.04, 'bandpass', 2600 + Math.random() * 2200, 1.6, 0.05 + Math.random() * 0.03);
+  }
+
+  /** A page rustle (new line, changing paper). */
+  rustle() {
+    this._noiseHit(0.22, 'bandpass', 1500, 0.6, 0.08);
+    this._noiseHit(0.18, 'highpass', 3500, 0.5, 0.05, 0.08);
+  }
+
+  /** A soft water plop, pitched per friend (i). */
+  plop(i = 0) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, f0 = 300 + ((i * 7) % 12) * 40;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 2.4, t + 0.09);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.2);
+  }
+
+  /** The wax seal pressing down: a soft thump. */
+  stamp() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.22, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.15);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.25);
+    this._noiseHit(0.08, 'lowpass', 900, 0.7, 0.06, 0.22);
+  }
+
+  /** A cork popping out of a bottle. */
+  cork() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(500, t); o.frequency.exponentialRampToValueAtTime(1300, t + 0.05);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.16, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.1);
   }
 
   /** Engine throttle 0 … 1 (idle putter at 0). */
