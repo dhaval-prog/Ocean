@@ -102,7 +102,7 @@ export class Chats {
 
   /** Every frame from the app: tiny bubbles rise now and then; a new letter sends up a burst. */
   update(dt) {
-    if (this.isOpen) { if (this._bubs && !this.reduce && !this.saver && !this.sheetFull) { this._bubStep(Math.min(dt, 0.05)); this._bubPlace(); } return; }
+    if (this.isOpen) { if (this._bubs && !this.reduce && !this.saver && this.stack.at(-1)?.page === 'list') { this._bubStep(Math.min(dt, 0.05)); this._bubPlace(); } return; }
     if (this.btn.hidden || this.reduce) return;
     if ((this._unreadAt -= dt) <= 0) {
       this._unreadAt = 0.5;
@@ -181,7 +181,7 @@ export class Chats {
   _bindSheetDrag() {
     let d = null;
     this.el.addEventListener('pointerdown', e => {
-      const h = e.target.closest('.c-grab, .c-top'); if (!h || e.target.closest('button')) return;
+      const h = e.target.closest('.c-grab, .c-thead'); if (!h || e.target.closest('button')) return;
       const sh = this.el.querySelector('.c-sheet'); if (!sh) return;
       d = { id: e.pointerId, y: e.clientY, sh, h: sh.getBoundingClientRect().height };
       sh.style.transition = 'none';
@@ -195,12 +195,7 @@ export class Chats {
       if (!d || e.pointerId !== d.id) return;
       const dy = e.clientY - d.y, sh = d.sh; d = null;
       sh.style.transition = ''; sh.style.transform = '';
-      const list = this.stack.at(-1).page === 'list';
-      if (Math.abs(dy) < 6 && list) {                                  // a tap on the title bar: open / lower the list
-        this.sheetFull = !sh.classList.contains('full'); sh.classList.toggle('full', this.sheetFull); sh.classList.toggle('lowered', !this.sheetFull);
-      } else if (dy > 60) {                                            // down: back to peeking at the sea (a thread goes back)
-        if (list) { this.sheetFull = false; sh.classList.remove('full'); sh.classList.add('lowered'); } else this.back();
-      } else if (dy < -40 && list) { this.sheetFull = true; sh.classList.add('full'); sh.classList.remove('lowered'); }   // up: the full list
+      if (dy > 60) this.back();                                        // a thread: drag it down to go back
     };
     window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', up, true);
   }
@@ -266,17 +261,15 @@ export class Chats {
   /** forward: true slides in from the right, false from the left, null redraws in place. */
   _render(forward) {
     const { page, arg } = this.stack.at(-1);
-    let html = { list: () => this._list(), group: () => this._group(), add: () => this._add(), thread: () => this._thread(arg), scan: () => this._scan() }[page]();
+    let html = { list: () => this._list(), all: () => this._all(), group: () => this._group(), add: () => this._add(), thread: () => this._thread(arg), scan: () => this._scan() }[page]();
     const anim = forward == null ? '' : forward ? 'in-fwd' : 'in-back';
     // the list and the threads sit in a frosted glass sheet over the live ocean (tap the sea above it,
     // or drag the handle down, to close; drag it up for the full height); the rest are full pages
-    const sheet = page === 'list' || page === 'thread';
+    const sheet = page === 'thread';
     this.el.className = 'chats page-' + page + (sheet ? ' sheet-mode' : '');
-    let sea = '';
-    if (page === 'list') { const k = html.indexOf('<div class="c-panel-top'); sea = html.slice(0, k); html = html.slice(k); }
     this.el.innerHTML = sheet
-      ? `${sea || '<div class="c-sky" data-act="dismiss" aria-hidden="true"></div>'}
-         <div class="c-sheet${page === 'thread' || this.sheetFull ? ' full' : page === 'list' ? ' lowered' : ''}${forward === true && this.stack.length === 1 ? ' rise' : ''}">
+      ? `<div class="c-sky" data-act="back" aria-hidden="true"></div>
+         <div class="c-sheet full${forward === true ? ' rise' : ''}">
            <div class="c-grab" aria-hidden="true"><i></i></div><div class="c-page ${anim}">${html}</div></div>`
       : `<div class="c-page ${anim}">${html}</div>`;
     if (page === 'add') this._drawQR();
@@ -285,29 +278,38 @@ export class Chats {
     if (page === 'thread') { const m = this.el.querySelector('.c-msgs'); if (m) m.scrollTop = m.scrollHeight; }
   }
 
-  /** The bubbles screen: every chat a glass bubble drifting on the sea (bigger = more waiting). */
+  /** The bubbles screen: every chat a glass bubble drifting on the sea (bigger = more waiting),
+   *  plus two bubbles for "New group" and "Add friend"; "All chats" opens the full list. */
   _list() {
-    const req = this.data.requests, chats = this._chats();
+    const chats = this._chats();
+    const wander = () => `--wd:${(5 + Math.random() * 3).toFixed(2)}s;--wx:${(Math.random() * 10 - 5).toFixed(1)}px;--wy:${(4 + Math.random() * 4).toFixed(1)}px;--wdl:${(-Math.random() * 6).toFixed(2)}s`;
     const bub = c => {
       const n = c.unread || 0, r = Math.round(Math.min(66, c.kind === 'group' ? 38 : 30 + 9 * Math.sqrt(n)));
       const inner = c.kind === 'group' ? `<span class="c-bgroup">${IC.group}</span>` : avatar(c.who[0]);
-      const w = `--wd:${(5 + Math.random() * 3).toFixed(2)}s;--wx:${(Math.random() * 10 - 5).toFixed(1)}px;--wy:${(4 + Math.random() * 4).toFixed(1)}px;--wdl:${(-Math.random() * 6).toFixed(2)}s`;
-      return `<button type="button" class="c-bub${n ? ' waiting' : ''}" data-chat="${c.id}" data-r="${r}" style="--r:${r}px;${w}" aria-label="${esc(c.name)}${n ? `, ${n} waiting` : ''}">
+      return `<button type="button" class="c-bub${n ? ' waiting' : ''}" data-chat="${c.id}" data-r="${r}" style="--r:${r}px;${wander()}" aria-label="${esc(c.name)}${n ? `, ${n} waiting` : ''}">
         <span class="c-wander"><span class="c-bglass">${inner}</span>${n ? `<span class="c-dot">${n > 99 ? '99+' : n}</span>` : ''}
         <span class="c-blabel">${esc(c.name)}<small>${ago(c.at)}</small></span></span></button>`;
     };
+    const act = (a, icon, label) => `<button type="button" class="c-bub action" data-act="${a}" data-r="30" style="--r:30px;${wander()}" aria-label="${label}">
+        <span class="c-wander"><span class="c-bglass"><span class="c-bgroup">${icon}</span></span><span class="c-blabel">${label}</span></span></button>`;
     return `
       <div class="c-sea">
         <button type="button" class="c-round c-close" data-act="dismiss" aria-label="Close chats">${IC.close}</button>
         <div class="c-btitle"><b>Chats</b><small>Bigger bubbles have more waiting</small></div>
-        <div class="c-bfield">${chats.map(bub).join('')}</div>
-        <div class="c-pills">
-          <button type="button" class="c-gpill" data-act="group"><span class="c-mini">${IC.group}</span>New group</button>
-          <button type="button" class="c-gpill" data-act="add"><span class="c-mini">${IC.newChat}</span>Add friend</button>
-        </div>
-      </div>
-      <div class="c-panel-top c-top"><h1>All chats</h1><span class="c-count">${chats.length}</span>
-        <button type="button" class="c-new" data-act="add" aria-label="Add a friend">${IC.newChat}</button></div>
+        <div class="c-bfield">${chats.map(bub).join('')}${act('group', IC.group, 'New group')}${act('add', IC.newChat, 'Add friend')}</div>
+        <button type="button" class="c-allbtn" data-act="all">${IC.chat}<span>All chats</span><i>${chats.length}</i></button>
+      </div>`;
+  }
+
+  /** All chats: the full list on a solid cream page. */
+  _all() {
+    const req = this.data.requests, chats = this._chats();
+    return `
+      <header class="c-top">
+        <button type="button" class="c-round dark" data-act="back" aria-label="Back">${IC.back}</button>
+        <h1>All chats</h1>
+        <button type="button" class="c-new" data-act="add" aria-label="Add a friend">${IC.newChat}</button>
+      </header>
       <div class="c-scroll">
         <div class="c-list">
           ${chats.map((c, i) => `
@@ -360,7 +362,7 @@ export class Chats {
     }
     // they nudge each other apart, gently swapping a little of their drift
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
-      const a = items[i], b = items[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.01, min = a.r + b.r + 22;
+      const a = items[i], b = items[j], dx = b.x - a.x, dy = (b.y - a.y) * 0.8, d = Math.hypot(dx, dy) || 0.01, min = a.r + b.r + 40;   // each bubble and its name below count as one tall shape
       if (d < min) {
         const push = (min - d) / 2, nx = dx / d, ny = dy / d;
         a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
@@ -468,6 +470,7 @@ export class Chats {
     else if (act === 'back') this.back();
     else if (act === 'home') this.close();
     else if (act === 'add') this.go('add');
+    else if (act === 'all') this.go('all');
     else if (act === 'group') this.go('group');
     else if (act === 'scan') this.go('scan');
     else if (act === 'copy') this._copy();
