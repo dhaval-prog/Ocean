@@ -130,21 +130,36 @@ export class Chats {
   }
 
   /** Tap: the bubble pops in a ring of droplets and the chats open from there. */
+  /** Tap the chat button: it pops, and a swarm of little bubbles flies out of it to become the chats. */
   _popOpen() {
     if (this.reduce) { this.open(); this.el.classList.add('fade-in'); setTimeout(() => this.el.classList.remove('fade-in'), 300); return; }
     if (this.btn.classList.contains('popping')) return;
     this.btn.classList.add('popping');
-    for (let k = 0; k < 10; k++) {
-      const d = document.createElement('i'), a = k / 10 * Math.PI * 2; d.className = 'gb-drop';
-      d.style.setProperty('--dx', (Math.cos(a) * 34).toFixed(1) + 'px'); d.style.setProperty('--dy', (Math.sin(a) * 34).toFixed(1) + 'px');
-      this.btn.appendChild(d); setTimeout(() => d.remove(), 600);
-    }
     try { navigator.vibrate?.(8); } catch {}
     const r = this.btn.getBoundingClientRect();
-    this.el.style.setProperty('--ox', (r.left + r.width / 2) + 'px'); this.el.style.setProperty('--oy', (r.top + r.height / 2) + 'px');
-    setTimeout(() => { this.btn.classList.remove('popping'); this.open(); this.el.classList.add('from-bubble'); setTimeout(() => this.el.classList.remove('from-bubble'), 420); }, 190);   // the page grows out of the bubble
+    this._btnAt = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    setTimeout(() => {
+      this.btn.classList.remove('popping');
+      this._swarmFrom = this._btnAt;                                   // _layoutBubbles sends the bubbles out from here
+      this.el.classList.add('swarming');
+      this.open();
+      setTimeout(() => this.el.classList.remove('swarming'), 1100);
+    }, 150);
   }
 
+  /** × on the bubbles: they drift back into the corner and the chat button re-forms. */
+  _swarmClose() {
+    const B = this._bubs, at = this._btnAt;
+    if (!B || !at || this.reduce || this._closing) { this.close(); return; }
+    this._closing = true;
+    const fr = this.el.querySelector('.c-bfield').getBoundingClientRect(), fast = this.saver;
+    B.items.forEach((b, k) => {
+      b.el.style.setProperty('--fx', (at.x - (fr.left + b.x)).toFixed(1) + 'px'); b.el.style.setProperty('--fy', (at.y - (fr.top + b.y)).toFixed(1) + 'px');
+      b.el.style.setProperty('--sd', (k * (fast ? 0.015 : 0.035)).toFixed(3) + 's');
+    });
+    this.el.classList.add('unswarming');
+    setTimeout(() => { this._closing = false; this.el.classList.remove('unswarming'); this.close(); }, fast ? 380 : 620);
+  }
 
   open(page = 'list', arg) {
     this.el.hidden = false; this.btn.hidden = true;
@@ -297,13 +312,13 @@ export class Chats {
       const n = c.unread || 0, r = Math.round(Math.min(66, c.kind === 'group' ? 38 : 30 + 9 * Math.sqrt(n)));
       const inner = c.kind === 'group' ? `<span class="c-bgroup">${IC.group}</span>` : avatar(c.who[0]);
       return `<button type="button" class="c-bub${n ? ' waiting' : ''}" data-chat="${c.id}" data-r="${r}" style="--r:${r}px;${wander()}" aria-label="${esc(c.name)}${n ? `, ${n} waiting` : ''}">
-        <span class="c-wander"><span class="c-bglass">${inner}</span>${n ? `<span class="c-dot">${n > 99 ? '99+' : n}</span>` : ''}
-        <span class="c-blabel">${esc(c.name)}<small>${ago(c.at)}</small></span></span></button>`;
+        <span class="c-swarm"><span class="c-wander"><span class="c-bglass">${inner}</span>${n ? `<span class="c-dot">${n > 99 ? '99+' : n}</span>` : ''}
+        <span class="c-blabel">${esc(c.name)}<small>${ago(c.at)}</small></span></span></span></button>`;
     };
     const act = (a, icon, label) => `<button type="button" class="c-bub action" data-act="${a}" data-r="30" style="--r:30px;${wander()}" aria-label="${label}">
-        <span class="c-wander"><span class="c-bglass"><span class="c-bgroup">${icon}</span></span><span class="c-blabel">${label}</span></span></button>`;
+        <span class="c-swarm"><span class="c-wander"><span class="c-bglass"><span class="c-bgroup">${icon}</span></span><span class="c-blabel">${label}</span></span></span></button>`;
     return `
-      <div class="c-sea">
+      <div class="c-sea"><div class="c-blur" aria-hidden="true"></div>
         <button type="button" class="c-round c-close" data-act="dismiss" aria-label="Close chats">${IC.close}</button>
         <div class="c-btitle"><b>Chats</b><small>Bigger bubbles have more waiting</small></div>
         <div class="c-bfield">${chats.map(bub).join('')}${act('group', IC.group, 'New group')}${act('add', IC.newChat, 'Add friend')}</div>
@@ -358,6 +373,23 @@ export class Chats {
     for (let k = 0; k < 120; k++) this._bubStep(0, true);
     if (fb) { fb.pinned = false; fb.el.classList.add('reform'); setTimeout(() => fb.el.classList.remove('reform'), 700); }
     this._bubPlace();
+    if (this._swarmFrom) this._swarm(this._swarmFrom, field);
+    this._swarmFrom = null;
+  }
+
+  /** Each bubble flies out from the chat button to its place, nearest first, the actions last; a plop as each lands. */
+  _swarm(from, field) {
+    const fr = field.getBoundingClientRect(), fast = this.saver;
+    const order = [...this._bubs.items].sort((a, b) => (a.el.classList.contains('action') - b.el.classList.contains('action'))
+      || (Math.hypot(fr.left + a.x - from.x, fr.top + a.y - from.y) - Math.hypot(fr.left + b.x - from.x, fr.top + b.y - from.y)));
+    order.forEach((b, k) => {
+      const delay = k * (fast ? 0.025 : 0.06) + (b.el.classList.contains('action') ? (fast ? 0.03 : 0.08) : 0);
+      b.el.style.setProperty('--fx', (from.x - (fr.left + b.x)).toFixed(1) + 'px'); b.el.style.setProperty('--fy', (from.y - (fr.top + b.y)).toFixed(1) + 'px');
+      b.el.style.setProperty('--sd', delay.toFixed(3) + 's');
+      b.el.classList.add('swarm');
+      setTimeout(() => this.audio?.plop?.(k + 2), (delay + (fast ? 0.3 : 0.5)) * 1000);
+      setTimeout(() => b.el.classList.remove('swarm'), (delay + 1) * 1000);
+    });
   }
 
   _bubStep(dt, relax = false) {
@@ -488,7 +520,7 @@ export class Chats {
     if (chat) { this.go('thread', chat.dataset.chat); return; }
     if (!a) return;
     const act = a.dataset.act;
-    if (act === 'dismiss') this.close();
+    if (act === 'dismiss') { if (this.stack.at(-1)?.page === 'list') this._swarmClose(); else this.close(); }
     else if (act === 'back') this.back();
     else if (act === 'home') this.close();
     else if (act === 'add') this.go('add');
