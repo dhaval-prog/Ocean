@@ -6,7 +6,7 @@ import { Post } from './fx/Post.js';
 import { Ambience } from './audio/Ambience.js';
 import { AutoQuality } from './core/AutoQuality.js';
 import { TopDownControls } from './core/TopDownControls.js';
-import { todFromClock, clockLabel, CYCLE_RATE, cycleWeather } from './core/Clock.js';
+import { todFromClock, clockLabel, CYCLE_RATE, cycleWeather, cycleStyle, suitedStyle } from './core/Clock.js';
 import { Boat } from './boat/Boat.js';
 import { Marker } from './boat/Marker.js';
 import { Smoke } from './boat/Smoke.js';
@@ -139,7 +139,9 @@ function applyLook() {
 // Time of day: 'realtime' (default, follows the device clock), 'cycle' (a full
 // day every hour) or 'manual' (a time the user picked). The choice is remembered.
 const MODE_KEY = 'ocean.todMode', TOD_KEY = 'ocean.tod';
-const state = { mode: 'realtime', tod: todFromClock(), style: 'deep' };
+// Ocean colour: one you picked, or Auto (follows the time and weather; the 2-hour cycle walks
+// through every colour with every weather). Choosing Real time or the 2-hour cycle turns Auto on.
+const state = { mode: 'realtime', tod: todFromClock(), style: 'deep', styleAuto: null };
 try {
   const st = localStorage.getItem('ocean.style');
   if (['deep', 'tropical', 'nordic', 'pastel'].includes(st)) state.style = st;
@@ -147,7 +149,10 @@ try {
   if (m === 'cycle' || m === 'manual') state.mode = m;
   const t = parseFloat(localStorage.getItem(TOD_KEY));
   if (state.mode !== 'realtime' && Number.isFinite(t)) state.tod = t;
+  const a = localStorage.getItem('ocean.styleAuto');
+  if (a === '1' || a === '0') state.styleAuto = a === '1';
 } catch {}
+if (state.styleAuto === null) state.styleAuto = state.mode !== 'manual';
 if (params.has('tod')) { state.tod = +params.get('tod'); state.mode = 'manual'; } // e.g. ?tod=4 for night
 // Weather: 'auto' (default, changes by itself), 'local' (real weather near you)
 // or 'manual' (a preset, fine-tuned with the sliders). Remembered.
@@ -291,19 +296,23 @@ function showTod() {
   ui.setTimeOfDay(ocean.timeOfDay, name);
 }
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef, graphics: hqGraphics },
+  initial: { tod: state.tod, mode: state.mode, style: state.style, styleAuto: state.styleAuto, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef, graphics: hqGraphics },
   onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; if (weather.mode === 'cycle') weather.setMode('auto'); ocean.setTimeOfDay(v); applyLook(); saveTod(); },
   onMode: m => {
     state.mode = m;
     if (m === 'realtime') state.tod = todFromClock();
-    // the 2-hour cycle brings its own weather (each time of day: clear, cloudy, rain, storm, fog in turn)
+    // the 2-hour cycle brings its own weather (each time of day: clear, cloudy, rain, storm, fog in turn);
+    // real time follows the real weather near you; both turn the automatic ocean colour on
     if (m === 'cycle') weather.setMode('cycle');
+    else if (m === 'realtime') weather.setMode('local');
     else if (weather.mode === 'cycle') weather.setMode('auto');
+    if (m !== 'manual') setStyleAuto(true);
     ocean.setTimeOfDay(state.tod); applyLook(); showTod(); saveTod();
   },
   onStyle: id => {
-    state.style = id; ocean.setStyle(id); applyLook();
-    try { localStorage.setItem('ocean.style', id); } catch {}
+    if (id === 'auto') { setStyleAuto(true); return; }
+    state.styleAuto = false; state.style = id; ocean.setStyle(id, 0.8); applyLook(); ui.setStyle(id, false);
+    try { localStorage.setItem('ocean.style', id); localStorage.setItem('ocean.styleAuto', '0'); } catch {}
   },
   onWeatherMode: m => weather.setMode(m),
   onPreset: id => weather.setPreset(id),
@@ -314,7 +323,17 @@ const ui = createControls(document.getElementById('panel'), {
   onReef: v => { ocean.reef = v; },
   onGraphics: hq => setGraphics(hq),
 });
-ocean.style = state.style;
+/** The ocean colour Auto wants right now. */
+const autoStyle = () => state.mode === 'cycle' ? cycleStyle(state.tod) : suitedStyle(weather.kind, state.tod);
+let autoStyleAt = 0;
+function setStyleAuto(on) {
+  state.styleAuto = on;
+  try { localStorage.setItem('ocean.styleAuto', on ? '1' : '0'); } catch {}
+  if (on) { const s = autoStyle(); ocean.setStyle(s, 2); state.style = s; }
+  ui.setStyle(ocean.style, on);
+}
+ocean.style = state.styleAuto ? autoStyle() : state.style;
+ui.setStyle(ocean.style, state.styleAuto);
 ocean.setTimeOfDay(state.tod);
 showTod();
 weather.onChange = () => { ui.setWeather(weather); saveWeather(); };
@@ -565,6 +584,11 @@ renderer.setAnimationLoop(() => {
     if ((todLabelAt -= dt) <= 0) { todLabelAt = 1; showTod(); if (state.mode === 'cycle') saveTod(); }
   }
   if (weather.mode === 'cycle') weather.followCycle(cycleWeather(state.tod));   // 2-hour cycle: weather in step with the time of day
+  if (state.styleAuto && (autoStyleAt -= dt) <= 0) {                // automatic ocean colour: a slow fade when it changes
+    autoStyleAt = 1;
+    const s = autoStyle();
+    if (s !== ocean.style) { ocean.setStyle(s, 8); state.style = s; ui.setStyle(s, true); }
+  }
   weather.update(dt);
   ocean.setWeather(weather, dt);
   applyLook();

@@ -21,8 +21,8 @@ const WX_MODES = [
  * day, weather, ocean colour, sea state, foam, clouds, glitter and reef shallows.
  */
 const MODES = [
-  { id: 'realtime', name: 'Real time', hint: 'Follows your clock' },
-  { id: 'cycle', name: '2-hour cycle', hint: 'Dawn to night every 2 hours: 24 min each, with clear, cloudy, rain, storm and fog in turn (about 5 min each)' },
+  { id: 'realtime', name: 'Real time', hint: 'Follows your clock and the weather near you; the ocean colour changes with them' },
+  { id: 'cycle', name: '2-hour cycle', hint: 'Dawn to night every 2 hours: 24 min each, with clear, cloudy, rain, storm and fog in turn (about 5 min each); the ocean colour changes too, so every colour meets every weather' },
   { id: 'manual', name: 'Manual', hint: 'Pick a time below' },
 ];
 
@@ -55,6 +55,7 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, o
       <div class="divider"></div>
       <div class="row head"><span class="eyebrow">Ocean colour</span><span class="value" data-style-label></span></div>
       <div class="styles" role="radiogroup" aria-label="Ocean colour">
+        <button type="button" class="style" role="radio" data-style="auto"><span class="swatch" style="background:conic-gradient(${STYLE_IDS.map(id => styleSwatch(id).match(/#[0-9a-f]{6}/i)[0]).join(', ')}, ${styleSwatch(STYLE_IDS[0]).match(/#[0-9a-f]{6}/i)[0]})"></span><span>Auto</span></button>
         ${STYLE_IDS.map(id => `<button type="button" class="style" role="radio" data-style="${id}"><span class="swatch" style="background:${styleSwatch(id)}"></span><span>${STYLES[id].name}</span></button>`).join('')}
       </div>
       <div class="divider"></div>
@@ -98,12 +99,13 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, o
   setMode(initial.mode);
 
   const styleBtns = [...panel.querySelectorAll('[data-style]')], styleLabel = $('[data-style-label]');
-  const setStyle = id => {
-    for (const b of styleBtns) { const on = b.dataset.style === id; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
-    styleLabel.textContent = STYLES[id].name;
+  // auto: the colour follows the time and weather (Auto is highlighted, the label names the colour now)
+  const setStyle = (id, auto = false) => {
+    for (const b of styleBtns) { const on = auto ? b.dataset.style === 'auto' : b.dataset.style === id; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+    styleLabel.textContent = (auto ? 'Auto · ' : '') + STYLES[id].name;
   };
-  setStyle(initial.style);
-  styleBtns.forEach(b => b.addEventListener('click', () => { setStyle(b.dataset.style); onStyle(b.dataset.style); }));
+  setStyle(initial.style, initial.styleAuto);
+  styleBtns.forEach(b => b.addEventListener('click', () => onStyle(b.dataset.style)));
   modeBtns.forEach(b => b.addEventListener('click', () => { setMode(b.dataset.mode); onMode(b.dataset.mode); }));
   // picking a time switches to manual
   const pick = v => { setMode('manual'); onTimeOfDay(v); setLabel(TIMES[Math.round(v) % TIMES.length].name); slider.value = v; };
@@ -146,6 +148,6 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, o
     get open() { return panel.classList.contains('open'); },
     setOpen,
     onOpenChange(f) { listeners.add(f); },
-    setMode,
+    setMode, setStyle,
   };
 }

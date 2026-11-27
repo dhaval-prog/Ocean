@@ -66,6 +66,16 @@ export class Weather {
     this.onChange?.();
   }
 
+  /** What the weather is heading for, as one of the preset kinds: clear, cloudy, rain, storm or fog. */
+  get kind() {
+    const t = this.target;
+    if (t.thunder > 0.5) return 'storm';
+    if (t.fog > 0.5) return 'fog';
+    if (t.rain > 0.3) return 'rain';
+    if (t.clouds > 0.55) return 'cloudy';
+    return 'clear';
+  }
+
   /** 2-hour cycle: switch to the weather the cycle has now (see Clock.cycleWeather). */
   followCycle(id) {
     if (this.mode !== 'cycle' || id === this._cycleId || !PRESETS[id]) return;

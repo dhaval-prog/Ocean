@@ -35,6 +35,33 @@ export const CYCLE_RATE = 5 / (CYCLE_MINUTES * 60);
 /** Weather order inside each time of day in the 2-hour cycle (4.8 minutes each). */
 export const CYCLE_WEATHER = ['clear', 'cloudy', 'rain', 'storm', 'fog'];
 
+/** Ocean colours in the order the automatic choice uses them. */
+export const AUTO_STYLES = ['deep', 'tropical', 'nordic', 'pastel'];
+
+/**
+ * The 2-hour cycle's ocean colour at time of day `tod`: it moves on one step with each weather and
+ * each time of day ((time of day + weather) mod 4), so in every 2-hour cycle each colour meets each
+ * weather (and each time of day).
+ */
+export function cycleStyle(tod) {
+  const seg = (((tod + 0.5) % 5) + 5) % 5, t = Math.floor(seg) % 5;
+  const w = CYCLE_WEATHER.indexOf(cycleWeather(tod));
+  return AUTO_STYLES[(t + w) % AUTO_STYLES.length];
+}
+
+/**
+ * Real time (or a time you picked) with automatic ocean colour: the colour that suits the time of
+ * day and the weather. kind: 'clear' | 'cloudy' | 'rain' | 'storm' | 'fog'; tod 0 … 5.
+ */
+export function suitedStyle(kind, tod) {
+  const t = Math.round((((tod % 5) + 5) % 5)) % 5;                  // 0 dawn, 1 day, 2 sunset, 3 dusk, 4 night
+  if (kind === 'storm') return 'nordic';
+  if (kind === 'rain') return 'deep';
+  if (kind === 'fog') return t === 4 ? 'nordic' : 'pastel';
+  if (kind === 'cloudy') return t === 0 || t === 3 ? 'pastel' : 'deep';
+  return ['pastel', 'tropical', 'tropical', 'pastel', 'deep'][t];   // clear
+}
+
 /**
  * Which weather the 2-hour cycle has at time of day `tod` (0 … 5). Each time of
  * day is the stretch centred on its whole number (Day = 0.5 … 1.5), and that
