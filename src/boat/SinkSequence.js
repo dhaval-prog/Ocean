@@ -289,7 +289,7 @@ export class SinkSequence {
     for (let i = 0; i < c.count; i++) {
       const o = i * 3, l = Math.hypot(acc[o], acc[o + 1], acc[o + 2]) || 1;
       const v = Math.min(1, 0.36 + 0.68 * Math.abs((acc[o] * lx + acc[o + 1] * ly + acc[o + 2] * lz) / l));
-      const ln = this._crease?.[i] ? 0.74 : 1;                                          // a faint line along every fold
+      const ln = this._crease?.[i] ? 0.86 : 1;                                          // a faint line along every fold
       c.setXYZ(i, v * ln, v * ln, v * ln * 1.01);
     }
     c.needsUpdate = true; this._shaded = true;
@@ -344,7 +344,7 @@ export class SinkSequence {
       // 6-8: fold in half (halves swing back), then each wing down
       if (!out && st(5) > 0) {
         if (Math.abs(qx) < snap) qx = 0;                                  // onto the centre (keel) crease
-        const phi = e(5) * (Math.PI / 2 - 0.2), side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);   // the keel halves stay a little open: a narrow V
+        const phi = e(5) * (Math.PI / 2 - 0.2 * Math.min(1, Math.max(0, (hh - qy) / PH))), side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);   // the keel is shut at the nose and opens a little toward the tail
         let u = Math.abs(qx); if (Math.abs(u - d) < snap && psi > 0) { u = d; cz[n] = 1; }  // onto the wing crease
         let X, Z;
         if (u <= d || psi === 0) { X = side * u * Math.cos(phi); Z = -u * Math.sin(phi); }
