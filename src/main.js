@@ -76,9 +76,13 @@ const ambience = new Ambience();
 
 const root = document.documentElement;
 const glintColor = new THREE.Color();
+const stormGrey = new THREE.Color('#7d8a8c'), skyNow = new THREE.Color(), skyTopNow = new THREE.Color();
 function applyLook() {
-  root.style.setProperty('--sky', '#' + ocean.skyColor.getHexString());
-  root.style.setProperty('--sky-top', '#' + ocean.skyTopColor.getHexString());
+  // storms grey the sky to match the grey-green sea
+  const g = ocean.storm * ocean.storm * 0.55;
+  skyNow.copy(ocean.skyColor).lerp(stormGrey, g); skyTopNow.copy(ocean.skyTopColor).lerp(stormGrey, g * 1.1);
+  root.style.setProperty('--sky', '#' + skyNow.getHexString());
+  root.style.setProperty('--sky-top', '#' + skyTopNow.getHexString());
   root.dataset.dark = ocean.light < 0.6 ? '1' : '0';
   for (const l of lights) l.intensity = l.userData.base * ocean.light;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#' + ocean.uniforms.uPalB.value[1].getHexString());
@@ -88,8 +92,10 @@ function applyLook() {
 // Time of day: 'realtime' (default, follows the device clock), 'cycle' (a full
 // day every hour) or 'manual' (a time the user picked). The choice is remembered.
 const MODE_KEY = 'ocean.todMode', TOD_KEY = 'ocean.tod';
-const state = { mode: 'realtime', tod: todFromClock() };
+const state = { mode: 'realtime', tod: todFromClock(), style: 'deep' };
 try {
+  const st = localStorage.getItem('ocean.style');
+  if (['deep', 'tropical', 'nordic', 'pastel'].includes(st)) state.style = st;
   const m = localStorage.getItem(MODE_KEY);
   if (m === 'cycle' || m === 'manual') state.mode = m;
   const t = parseFloat(localStorage.getItem(TOD_KEY));
@@ -103,18 +109,23 @@ function showTod() {
   ui.setTimeOfDay(ocean.timeOfDay, name);
 }
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, mode: state.mode, storm: ocean.storm, foam: ocean.foam, glitter: ocean.glitter, reef: ocean.reef },
+  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: ocean.storm, foam: ocean.foam, glitter: ocean.glitter, reef: ocean.reef },
   onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; ocean.setTimeOfDay(v); applyLook(); saveTod(); },
   onMode: m => {
     state.mode = m;
     if (m === 'realtime') state.tod = todFromClock();
     ocean.setTimeOfDay(state.tod); applyLook(); showTod(); saveTod();
   },
-  onStorm: v => { ocean.storm = v; },
+  onStyle: id => {
+    state.style = id; ocean.setStyle(id); applyLook();
+    try { localStorage.setItem('ocean.style', id); } catch {}
+  },
+  onStorm: v => { ocean.storm = v; applyLook(); },
   onFoam: v => { ocean.foam = v; },
   onGlitter: v => { ocean.glitter = v; },
   onReef: v => { ocean.reef = v; },
 });
+ocean.style = state.style;
 ocean.setTimeOfDay(state.tod);
 showTod();
 

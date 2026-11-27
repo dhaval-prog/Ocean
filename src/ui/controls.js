@@ -1,4 +1,4 @@
-import { TIMES, CHIP_COLORS } from '../ocean/palettes.js';
+import { TIMES, CHIP_COLORS, STYLES, STYLE_IDS, styleSwatch } from '../ocean/palettes.js';
 
 /**
  * Account settings panel, opened from the account button (top right, next to
@@ -12,7 +12,7 @@ const MODES = [
   { id: 'manual', name: 'Manual', hint: 'Pick a time below' },
 ];
 
-export function createControls(panel, { initial, onTimeOfDay, onMode, onStorm, onFoam, onGlitter, onReef }) {
+export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, onStorm, onFoam, onGlitter, onReef }) {
   panel.innerHTML = `
     <div class="panel-head">
       <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="currentColor"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0z" fill="currentColor"/></svg></span>
@@ -29,6 +29,11 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStorm, o
         ${MODES.map(m => `<button type="button" class="mode" role="radio" data-mode="${m.id}" title="${m.hint}">${m.name}</button>`).join('')}
       </div>
       <div class="hint" data-mode-hint></div>
+      <div class="divider"></div>
+      <div class="row head"><span class="eyebrow">Ocean colour</span><span class="value" data-style-label></span></div>
+      <div class="styles" role="radiogroup" aria-label="Ocean colour">
+        ${STYLE_IDS.map(id => `<button type="button" class="style" role="radio" data-style="${id}"><span class="swatch" style="background:${styleSwatch(id)}"></span><span>${STYLES[id].name}</span></button>`).join('')}
+      </div>
       <div class="divider"></div>
       <div class="row head"><span class="eyebrow">Sea state</span><span class="hint">Calm → Stormy</span></div>
       <input type="range" min="0" max="1" step="0.01" data-storm aria-label="Sea state">
@@ -62,6 +67,14 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStorm, o
     modeHint.textContent = MODES.find(m => m.id === id).hint;
   };
   setMode(initial.mode);
+
+  const styleBtns = [...panel.querySelectorAll('[data-style]')], styleLabel = $('[data-style-label]');
+  const setStyle = id => {
+    for (const b of styleBtns) { const on = b.dataset.style === id; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+    styleLabel.textContent = STYLES[id].name;
+  };
+  setStyle(initial.style);
+  styleBtns.forEach(b => b.addEventListener('click', () => { setStyle(b.dataset.style); onStyle(b.dataset.style); }));
   modeBtns.forEach(b => b.addEventListener('click', () => { setMode(b.dataset.mode); onMode(b.dataset.mode); }));
   // picking a time switches to manual
   const pick = v => { setMode('manual'); onTimeOfDay(v); setLabel(TIMES[Math.round(v) % TIMES.length].name); slider.value = v; };
