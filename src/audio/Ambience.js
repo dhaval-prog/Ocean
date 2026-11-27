@@ -1,5 +1,5 @@
-// Generated ambience (no audio files): waves, wind, and a soft generative pad
-// with the odd bell note. Browsers only allow audio after a user gesture, so
+// Generated ambience (no audio files): waves, wind, rain, thunder and a soft
+// generative pad with the odd bell note. Browsers only allow audio after a user gesture, so
 // call start() from a tap or key press.
 
 const CHORDS = [
@@ -28,6 +28,10 @@ export class Ambience {
     let last = 0;
     for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
     const noise = () => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.start(ctx.currentTime + Math.random()); return s; };
+    this._noiseBuf = buf;
+    // white noise for rain hiss
+    const wbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), w = wbuf.getChannelData(0);
+    for (let i = 0; i < w.length; i++) w[i] = Math.random() * 2 - 1;
     const lfo = (rate, depth, target) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(target); o.start();
@@ -47,6 +51,15 @@ export class Ambience {
     this.wind = ctx.createGain(); this.wind.gain.value = 0.05;
     noise().connect(bp); bp.connect(this.wind); this.wind.connect(this.master);
     lfo(0.05, 350, bp.frequency);
+
+    // rain: hiss (high-passed white noise) over a soft patter (band-passed)
+    this.rain = ctx.createGain(); this.rain.gain.value = 0; this.rain.connect(this.master);
+    for (const [type, f, q, g] of [['highpass', 2400, 0.5, 0.16], ['bandpass', 900, 0.8, 0.22]]) {
+      const src = ctx.createBufferSource(); src.buffer = wbuf; src.loop = true; src.start(ctx.currentTime + Math.random());
+      const flt = ctx.createBiquadFilter(); flt.type = type; flt.frequency.value = f; flt.Q.value = q;
+      const gg = ctx.createGain(); gg.gain.value = g;
+      src.connect(flt); flt.connect(gg); gg.connect(this.rain);
+    }
 
     // music bus: lowpass + feedback delay for a soft, spacious pad
     this.music = ctx.createGain(); this.music.gain.value = 0.11;
@@ -117,6 +130,22 @@ export class Ambience {
     }
   }
 
+  /** Rolling thunder after `delay` seconds; strength 0 … 1 (closer = sharper crack). */
+  thunder(delay = 1, strength = 1) {
+    if (!this.ctx || this.muted || !this._noiseBuf) return;
+    const ctx = this.ctx, t = ctx.currentTime + delay, dur = 3 + strength * 3;
+    const src = ctx.createBufferSource(); src.buffer = this._noiseBuf; src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180 + strength * 500; lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(180 + strength * 500, t); lp.frequency.exponentialRampToValueAtTime(90, t + dur);
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.9 * strength, t + 0.08 + (1 - strength) * 0.4);    // crack, or a distant swell
+    g.gain.setTargetAtTime(0.5 * strength, t + 0.4, 0.3);
+    g.gain.setTargetAtTime(0.0001, t + 1.2, dur / 4);                                   // long rumble
+    src.connect(lp); lp.connect(g); g.connect(this.master);
+    src.start(t, Math.random() * 3); src.stop(t + dur + 1);
+  }
+
   setMuted(m) {
     this.muted = m;
     if (!this.ctx) return;
@@ -125,11 +154,12 @@ export class Ambience {
     this.master.gain.setTargetAtTime(m ? 0 : 0.8, t, 0.4);
   }
 
-  update(storm, night) {
+  update(storm, night, rain = 0, wind = storm) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.waves.gain.setTargetAtTime(0.45 + storm * 0.6, t, 0.5);
-    this.wind.gain.setTargetAtTime(0.03 + storm * 0.22, t, 0.5);
+    this.wind.gain.setTargetAtTime(0.03 + Math.max(storm, wind) * 0.22, t, 0.5);
+    this.rain.gain.setTargetAtTime(rain * 0.9, t, 0.8);
     this.music.gain.setTargetAtTime(0.11 - storm * 0.05 + night * 0.02, t, 1);
   }
 }

@@ -13,6 +13,9 @@ import { Smoke } from './boat/Smoke.js';
 import { SinkSequence } from './boat/SinkSequence.js';
 import { Letter } from './social/Letter.js';
 import { createControls } from './ui/controls.js';
+import { Weather, PRESETS } from './weather/Weather.js';
+import { Rain } from './weather/Rain.js';
+import { Spray } from './weather/Spray.js';
 import './styles.css';
 
 const app = document.getElementById('app');
@@ -48,7 +51,12 @@ const lights = [
 const ocean = new Ocean({ size: 500, segments: 340 }); // big enough that the tilted view never reaches its edge
 const particles = new Particles();
 const streaks = new WindStreaks(7);
-scene.add(ocean.mesh, particles.points, streaks.mesh);
+const rain = new Rain();
+const spray = new Spray();
+scene.add(ocean.mesh, particles.points, streaks.mesh, rain.points, spray.points);
+const weather = new Weather();
+// lightning lights up the sky behind the sea too
+const flashEl = document.createElement('div'); flashEl.className = 'flash'; flashEl.setAttribute('aria-hidden', 'true');
 
 // the tugboat: tap the sea to sail it there
 const boat = new Boat(ocean);
@@ -76,16 +84,28 @@ const ambience = new Ambience();
 
 const root = document.documentElement;
 const glintColor = new THREE.Color();
-const stormGrey = new THREE.Color('#7d8a8c'), skyNow = new THREE.Color(), skyTopNow = new THREE.Color();
+const stormGrey = new THREE.Color('#7d8a8c'), cloudGrey = new THREE.Color('#aab4ba'), fogWhite = new THREE.Color('#dde4e8');
+const skyNow = new THREE.Color(), skyTopNow = new THREE.Color(), fogNow = new THREE.Color();
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+const cssCache = {};
+const setCss = (k, v) => { if (cssCache[k] !== v) { cssCache[k] = v; k.startsWith('--') ? root.style.setProperty(k, v) : (root.dataset.dark = v); } };
+// Sky, fog colour and lights from the time of day + weather. Cheap enough to
+// run every frame (CSS is only touched when a colour actually changes).
 function applyLook() {
-  // storms grey the sky to match the grey-green sea
-  const g = ocean.storm * ocean.storm * 0.55;
-  skyNow.copy(ocean.skyColor).lerp(stormGrey, g); skyTopNow.copy(ocean.skyTopColor).lerp(stormGrey, g * 1.1);
-  root.style.setProperty('--sky', '#' + skyNow.getHexString());
-  root.style.setProperty('--sky-top', '#' + skyTopNow.getHexString());
-  root.dataset.dark = ocean.light < 0.6 ? '1' : '0';
-  for (const l of lights) l.intensity = l.userData.base * ocean.light;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#' + ocean.uniforms.uPalB.value[1].getHexString());
+  const W = weather.cur;
+  const g = ocean.storm * ocean.storm * 0.55;                       // storms grey the sky to match the sea
+  skyNow.copy(ocean.skyColor).lerp(stormGrey, g).lerp(cloudGrey, W.clouds * 0.3);
+  skyTopNow.copy(ocean.skyTopColor).lerp(stormGrey, g * 1.1).lerp(cloudGrey, W.clouds * 0.35);
+  fogNow.copy(fogWhite).multiplyScalar(0.18 + 0.82 * ocean.light).lerp(skyNow, 0.35);
+  skyNow.lerp(fogNow, W.fog * 0.6); skyTopNow.lerp(fogNow, W.fog * 0.7);
+  ocean.uniforms.uFogCol.value.copy(fogNow);
+  setCss('--sky', '#' + skyNow.getHexString());
+  setCss('--sky-top', '#' + skyTopNow.getHexString());
+  setCss('dark', ocean.light < 0.6 ? '1' : '0');
+  const dim = 1 - W.clouds * 0.22 - W.rain * 0.08;
+  for (const l of lights) l.intensity = l.userData.base * (ocean.light * dim + weather.flash * 0.8);
+  const theme = '#' + ocean.uniforms.uPalB.value[1].getHexString();
+  if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); }
 }
 
 // --- UI -----------------------------------------------------------------------
@@ -102,6 +122,23 @@ try {
   if (state.mode !== 'realtime' && Number.isFinite(t)) state.tod = t;
 } catch {}
 if (params.has('tod')) { state.tod = +params.get('tod'); state.mode = 'manual'; } // e.g. ?tod=4 for night
+// Weather: 'auto' (default, changes by itself), 'local' (real weather near you)
+// or 'manual' (a preset, fine-tuned with the sliders). Remembered.
+const WX_KEY = 'ocean.weather';
+try {
+  const w = JSON.parse(localStorage.getItem(WX_KEY) || 'null');
+  if (w?.mode === 'manual') {
+    if (PRESETS[w.preset]) weather.setPreset(w.preset);
+    else if (w.custom) { weather.setPreset('clear'); Object.assign(weather.target, w.custom); weather.preset = 'custom'; weather.name = 'Custom'; }
+  } else if (w?.mode === 'local') weather.setMode('local');
+} catch {}
+if (params.has('weather') && PRESETS[params.get('weather')]) weather.setPreset(params.get('weather')); // e.g. ?weather=storm
+if (weather.mode === 'auto') weather.setMode('auto');
+Object.assign(weather.cur, weather.target);                      // start in the chosen weather, no glide
+const saveWeather = () => {
+  try { localStorage.setItem(WX_KEY, JSON.stringify({ mode: weather.mode, preset: weather.preset, custom: weather.preset === 'custom' ? Object.fromEntries(['storm', 'foam', 'clouds', 'rain', 'fog', 'thunder', 'wind'].map(k => [k, +weather.target[k].toFixed(3)])) : null })); } catch {}
+};
+weather.onThunder = (delay, strength) => ambience.thunder(delay, strength);
 const saveTod = () => { try { localStorage.setItem(MODE_KEY, state.mode); localStorage.setItem(TOD_KEY, String(state.tod % 5)); } catch {} };
 let todLabelAt = 0;
 function showTod() {
@@ -109,7 +146,7 @@ function showTod() {
   ui.setTimeOfDay(ocean.timeOfDay, name);
 }
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: ocean.storm, foam: ocean.foam, glitter: ocean.glitter, reef: ocean.reef },
+  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef },
   onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; ocean.setTimeOfDay(v); applyLook(); saveTod(); },
   onMode: m => {
     state.mode = m;
@@ -120,14 +157,20 @@ const ui = createControls(document.getElementById('panel'), {
     state.style = id; ocean.setStyle(id); applyLook();
     try { localStorage.setItem('ocean.style', id); } catch {}
   },
-  onStorm: v => { ocean.storm = v; applyLook(); },
-  onFoam: v => { ocean.foam = v; },
+  onWeatherMode: m => weather.setMode(m),
+  onPreset: id => weather.setPreset(id),
+  onStorm: v => weather.tweak('storm', v),
+  onFoam: v => weather.tweak('foam', v),
+  onClouds: v => weather.tweak('clouds', v),
   onGlitter: v => { ocean.glitter = v; },
   onReef: v => { ocean.reef = v; },
 });
 ocean.style = state.style;
 ocean.setTimeOfDay(state.tod);
 showTod();
+weather.onChange = () => { ui.setWeather(weather); saveWeather(); };
+ui.setWeather(weather);
+app.appendChild(flashEl);
 
 // Account button (next to sound) opens / closes the settings. A tap outside
 // the panel or Esc closes it.
@@ -208,7 +251,7 @@ window.addEventListener('pointercancel', endSteer);
 renderer.domElement.addEventListener('pointerdown', e => {
   if (steer || seq.active) return;
   pressed = true; rippleAt(e, 1);
-  if (e.isPrimary && e.button === 0 && !e.shiftKey) down = { x: e.clientX, y: e.clientY, t: performance.now() };
+  if (e.isPrimary && e.button === 0) down = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
 window.addEventListener('pointerup', e => {
   pressed = false;
@@ -270,34 +313,6 @@ function followBoat(dt) {
   controls.velocity.set(0, 0);
 }
 
-// --- 360° view -------------------------------------------------------------------
-// The button turns on look-around mode: a one-finger drag turns the view all the
-// way round and tilts it. Turning it off eases back to the normal north-up view.
-// Two-finger twist (phones), right-drag / Shift+drag and Q / E (desktop) turn it any time.
-const orbitBtn = document.getElementById('orbit');
-function setOrbit(on) {
-  controls.orbit = on;
-  orbitBtn.classList.toggle('on', on);
-  orbitBtn.setAttribute('aria-pressed', String(on));
-  orbitBtn.setAttribute('aria-label', on ? 'Leave 360° view and reset the camera' : '360° view: drag to look around');
-  if (!on) controls.resetView();
-}
-orbitBtn.addEventListener('click', e => { e.stopPropagation(); setOrbit(!controls.orbit); });
-const rotKeys = new Set();
-window.addEventListener('keydown', e => {
-  if (e.target.closest?.('input, button, textarea, select') || seq.active) return;
-  if (e.code === 'KeyQ' || e.code === 'KeyE') { rotKeys.add(e.code); e.preventDefault(); }
-});
-window.addEventListener('keyup', e => rotKeys.delete(e.code));
-window.addEventListener('blur', () => rotKeys.clear());
-let shownYaw = NaN;
-function updateOrbit(dt) {
-  if (rotKeys.size) controls.rotateBy(((rotKeys.has('KeyQ') ? 1 : 0) - (rotKeys.has('KeyE') ? 1 : 0)) * dt * 1.4);
-  ocean.uniforms.uViewDir.value.set(-Math.sin(controls.yaw), -Math.cos(controls.yaw));
-  const deg = Math.round(THREE.MathUtils.radToDeg(controls.yaw));
-  if (deg !== shownYaw) { shownYaw = deg; orbitBtn.style.setProperty('--yaw', deg + 'deg'); }
-}
-
 // --- slow drift when idle: the view floats in a lazy circle -----------------
 let idle = 0, interacting = false, driftT = 0;
 const anchor = new THREE.Vector2();
@@ -323,6 +338,7 @@ function applySize() {
   post.setSize(W, H, pixelRatio);
   streaks.setSize(W * pixelRatio, H * pixelRatio);
   smoke.setScale(H * pixelRatio, camera.fov);
+  spray.setScale(H * pixelRatio, camera.fov);
 }
 function resize() {
   W = app.clientWidth || 1; H = app.clientHeight || 1;
@@ -342,7 +358,8 @@ const quality = new AutoQuality({
 // --- loop -----------------------------------------------------------------------
 const timer = new THREE.Timer();
 timer.connect(document); // pauses cleanly while the tab is hidden
-let elapsed = 0, glowTimer = 0, dropTimer = 1;
+let elapsed = 0, glowTimer = 0, dropTimer = 1, wxSyncAt = 0;
+const lookWx = { glints: 0, petals: 0, specks: 0 }, windVec = [0, 0], bowPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(0.1, timer.getDelta());
@@ -351,10 +368,17 @@ renderer.setAnimationLoop(() => {
     if (state.mode === 'cycle') state.tod = (state.tod + dt * HOUR_CYCLE_RATE) % 5;
     else state.tod = todFromClock();
     ocean.setTimeOfDay(state.tod);
-    applyLook();
     if ((todLabelAt -= dt) <= 0) { todLabelAt = 1; showTod(); if (state.mode === 'cycle') saveTod(); }
   }
+  weather.update(dt);
+  ocean.setWeather(weather, dt);
+  applyLook();
+  flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.35).toFixed(3) : '0';
+  if ((wxSyncAt -= dt) <= 0) { wxSyncAt = 0.5; ui.setWeatherValues(weather.cur); }
+  const W = weather.cur;
+  // ambient particles: no petals or rising glints in the rain
   const L = ocean.look;
+  lookWx.glints = L.glints * (1 - W.rain * 0.8); lookWx.petals = L.petals * (1 - W.rain); lookWx.specks = L.specks * (1 - W.rain);
 
   // now and then something drops into the sea somewhere in view
   if ((dropTimer -= dt) <= 0) {
@@ -373,7 +397,6 @@ renderer.setAnimationLoop(() => {
   drift(dt);
   followBoat(dt);
   controls.update(dt);
-  updateOrbit(dt);
   ocean.update(dt, elapsed);
   seq.update(dt, performance.now());
   letter.update();
@@ -381,18 +404,26 @@ renderer.setAnimationLoop(() => {
   if (marker.show && !boat.target) marker.hide();   // arrived
   marker.update(dt, elapsed);
   smoke.setLight(ocean.light);
-  smoke.update(dt, { funnel: boat.frozen ? null : boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01 });
+  const ws = 0.3 + W.wind * 1.6;
+  windVec[0] = weather.windDir[0] * ws; windVec[1] = weather.windDir[1] * ws;
+  smoke.update(dt, { funnel: boat.frozen ? null : boat.funnelWorld(funnelPos), heading: boat.heading, speed01: boat.throttle01, wind: windVec });
+  // sea spray off the bow in rough water
+  const live = boat.ready && !boat.frozen && boat.group.visible;
+  if (live) bowPos.set(boat.position.x + Math.cos(boat.heading) * 1.8, 0, boat.position.y - Math.sin(boat.heading) * 1.8);
+  spray.setLight(ocean.light);
+  spray.update(dt, { bow: live ? bowPos : null, heading: boat.heading, speed01: Math.max(0, boat.speed) / boat.maxSpeed, rough: ocean.storm, water: ocean.base });
+  rain.update(elapsed, { center: controls.center, rain: W.rain, wind: W.wind, windDir: weather.windDir, pixelRatio, light: ocean.light });
   ambience.setEngine(boat.throttle01);
   boat.setNight(L.night);
   glintColor.copy(ocean.uniforms.uPalB.value[5]).lerp(ocean.uniforms.uPalA.value[8], 0.5);
-  particles.update(elapsed, { center: controls.center, look: L, storm: ocean.storm, pixelRatio, glintColor });
-  streaks.update(elapsed, ocean.storm, ocean.light);
+  particles.update(elapsed, { center: controls.center, look: lookWx, storm: ocean.storm, pixelRatio, glintColor });
+  streaks.update(elapsed, ocean.storm, ocean.light, weather.windDir, W.wind);
   post.update(L.night, ocean.storm);
-  ambience.update(ocean.storm, L.night);
+  ambience.update(ocean.storm, L.night, W.rain, W.wind);
 
   post.render(dt);
   quality.tick(dt);
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, boat, marker, smoke, seq, letter, particles, post, ambience, quality };

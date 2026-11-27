@@ -96,7 +96,7 @@ export class Smoke {
     for (let i = 0; i < n; i++) this.emit(funnel, back, 0.4 + i * 0.2);
   }
 
-  update(dt, { funnel, heading, speed01 }) {
+  update(dt, { funnel, heading, speed01, wind = null }) {
     // emit: steady puffs while running, the odd lazy puff when idle
     const running = speed01 > 0.05, interval = THREE.MathUtils.lerp(0.65, 0.3, speed01) * (0.7 + Math.random() * 0.6);   // fewer puffs
     this.timer = Math.min(this.timer - dt, running ? interval : Infinity);   // start puffing as soon as it moves
@@ -113,6 +113,7 @@ export class Smoke {
       p.p.addScaledVector(p.vel, dt);
       p.vel.multiplyScalar(Math.exp(-dt * 0.9));           // slow down as it spreads
       p.vel.y += dt * 0.15;
+      if (wind) { p.p.x += wind[0] * dt; p.p.z += wind[1] * dt; }   // carried off downwind
       this.pos.set([p.p.x, p.p.y, p.p.z], i * 3);
       const pop = Math.min(1, p.age / 0.12);                // quick pop-in
       this.size[i] = THREE.MathUtils.lerp(p.start, p.end, Math.sqrt(k)) * (0.6 + 0.4 * pop);

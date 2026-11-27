@@ -16,10 +16,16 @@ npm run build      # production build in dist/
 ## What's here
 
 - **Tilted view**: the camera looks down at the sea at 60° from the horizon (set with `pitch` in `main.js`; 90 = straight down). Drag to pan (the water stays under your finger), pinch or scroll to zoom; panning glides to a stop and stays inside the play area.
-- **360° view**: tap the **360°** button and drag to turn the view all the way round and tilt it; tap it again to ease back to the normal north-up view (its compass needle shows which way is north). Any time: twist two fingers on phones, right-drag / Shift+drag or Q / E on desktop.
 - **Cartoon water**: big flat colour shapes, chunky white foam with ink outlines, little 4-point star twinkles and flat cloud shadows drifting across. Time of day (Dawn, Day, Sunset, Dusk, Night), sea state, foam amount, twinkle amount (Glitter) and reef shallows.
-- **Light on the water**: a sun path (gold at sunset, silver moonlight at night) of cartoon glints running from the viewer toward the sun in the north-north-east, so it shifts as the 360° view turns; the water deepens toward the far side of the view; the boat casts a soft shadow.
-- **Sea state colour**: storms turn the sea and sky grey-green and darker, dim the sun path and whip up foam. Night foam is kept quiet so the sea reads moonlit.
+- **Light on the water**: a sun path (gold at sunset, silver moonlight at night) of cartoon glints running from the viewer toward the sun in the north-north-east; the water deepens toward the far side of the view; the boat casts a soft shadow.
+- **Foam**: a few big cartoon patches with clean outlines that form, drift downwind and dissolve into lace before forming again elsewhere, plus white caps that sit on the crests of the swell the boat rides and slide off the back as each crest passes. At night the boat's wake and the ripples glow cyan-blue.
+- **Weather** (Account settings): **Clear, Cloudy, Rain, Storm, Fog** presets set sea state, foam, clouds, sky and sound together; the Sea state / Foam / Clouds sliders fine-tune on top (and switch to a Custom fixed weather). Modes: **Changing** (default: drifts by itself every few minutes, e.g. clear, breezy, cloudy, a rain shower, clearing up), **Near me** (real local weather from Open-Meteo, asks for location; coordinates are rounded to ~1 km; refreshes every 15 min; falls back to Changing if location is refused) and **Fixed**. Remembered. `src/weather/Weather.js`.
+  - **Rain**: falling streaks slanted by the wind, rings popping all over the water, rain hiss.
+  - **Storm**: lightning flashes over the sea and sky with thunder a moment later, darker faster cloud shadows, grey-green sea and sky, big waves.
+  - **Fog**: the water fades into soft grey-white with distance; the sun path softens.
+  - **Clouds**: Clear → Overcast; overcast hides the sun glitter and flattens the colours.
+  - **Extras**: a cartoon rainbow after a good shower (daytime), sea spray off the bow in rough water at speed, and one wind direction that turns the waves and foam, the smoke and the wind streaks together.
+  - URL option: `?weather=clear|cloudy|rain|storm|fog` starts in a fixed weather.
 - **Ocean colour** (Account settings): Deep Ocean (default), Tropical, Nordic or Pastel, applied on top of every time of day and remembered. Defined in `src/ocean/palettes.js` (`STYLES`).
 - **Time of day**: **Real time** by default (follows the device clock: dawn ~6:30, day 8:30–16:30, sunset ~18:30, dusk ~19:45, night from 21:00), or a **1-hour cycle** (dawn → night → dawn every hour), or **Manual** (picking a time or dragging the slider). The choice is remembered. Mapping in `src/core/Clock.js`.
 - **Tugboat**: a cel-shaded, outlined tugboat rides the waves (rising, falling, pitching and rolling with the actual water surface, still or moving); its windows glow at night. Model: `public/models/tugboat.glb`.
@@ -53,8 +59,11 @@ src/
   fx/Post.js         bloom + ink outlines + colour grading + vignette
   audio/Ambience.js  generated waves / wind / music
   core/AutoQuality.js adaptive pixel ratio
-  core/TopDownControls.js tilted pan / zoom / 360° turn camera (pitch, default 60°)
+  core/TopDownControls.js tilted pan / zoom camera (pitch, default 60°)
   core/Clock.js      real clock → time of day
+  weather/Weather.js presets, changing + local weather, lightning, rainbow
+  weather/Rain.js    falling rain
+  weather/Spray.js   bow spray
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings
   boat/Smoke.js      funnel smoke puffs (one batch)

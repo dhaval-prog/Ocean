@@ -8,6 +8,9 @@ uniform float uStorm; uniform float uReef; uniform float uFoam; uniform float uG
 uniform vec4 uRipples[12]; uniform vec4 uObjects[4];
 uniform vec4 uBoat; uniform vec2 uBoatSize;   // boat: x, z, heading, speed 0..1 | bow distance, half beam
 uniform float uBoatShadow; uniform vec2 uLightDir; uniform vec3 uLightCol; uniform float uRefl;
+uniform float uClouds; uniform float uCloudT; uniform float uRain; uniform float uFog; uniform vec3 uFogCol;
+uniform float uFlash; uniform float uRainbow; uniform float uThunder;
+const vec3 GLOW = vec3(0.3, 0.95, 1.0);   // night bioluminescence: cyan-blue
 varying float vWave;
 float oc_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float oc_noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f);
@@ -29,7 +32,10 @@ export const GLSL_VERTEX = /* glsl */ `#include <begin_vertex>
 export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
   {
     vec2 p = vWPos.xz; float t = uTime, fl = uFlow;
-    float far = clamp(dot(vWPos.xz - cameraPosition.xz, uViewDir)/uFarScale*0.5 + 0.5, 0.0, 1.0); // 1 = top of the screen
+    // 0 around the middle of the view … 1 toward the top of the screen, measured in
+    // camera heights so it holds at any zoom (it used to be ~1 everywhere, which
+    // washed the whole sea with sky colour)
+    float far = smoothstep(0.75, 2.2, dot(vWPos.xz - cameraPosition.xz, uViewDir) / max(cameraPosition.y - 1.2, 1.0));
     // time-of-day sweep: far side changes first, light rolls toward the viewer
     float m = clamp(uMix*1.6 - (1.0 - far)*0.6, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
     vec3 pal[10]; for (int i = 0; i < 10; i++) pal[i] = mix(uPalA[i], uPalB[i], m);
@@ -83,29 +89,56 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
     c = mix(c, sand, core*0.8);
     c = mix(c, pal[5], smoothstep(0.2, 0.0, abs(rd - 2.75))*uReef*0.55);
 
-    // foam lines (+ storm, + night bioluminescent pulse & trails)
-    vec2 fs = q*vec2(0.6, 1.9) + vec2(-fl*0.4, 0.0) + warp*1.6;
-    float r1 = oc_ridge(fs), r2 = oc_ridge(fs*1.9 + 7.3 + vec2(-fl*0.3, 0.0));
-    // uFoam: 0 = almost none, 1 = original amount. Storms always add some back.
+    // --- foam -------------------------------------------------------------------
+    // uFoam: 0 = almost none, 1 = lots. Storms always whip some up.
     float foam = clamp(uFoam + uStorm*0.5, 0.0, 1.0);
-    float mask = smoothstep(0.42 + (1.0 - foam)*0.12 - uStorm*0.25, 0.6 + (1.0 - foam)*0.1 - uStorm*0.22, oc_fbm(s*0.4 + vec2(fl*0.04, 0.0) + 20.0))
-               * (0.35 + 0.65*smoothstep(0.48, 0.6, v));
-    float lines = max(smoothstep(0.9 + (1.0 - foam)*0.04 - uStorm*0.06, 0.915 + (1.0 - foam)*0.04 - uStorm*0.06, r1),
-                      0.8*foam*smoothstep(0.95 - uStorm*0.05, 0.965 - uStorm*0.05, r2)) * smoothstep(0.25, 0.35, mask) * mix(0.5, 1.0, foam);
-    float trail = 0.0;
-    for (int k = 1; k <= 4; k++) trail += smoothstep(0.88, 0.96, oc_ridge(fs + vec2(float(k)*0.13, 0.0))) * (1.0 - float(k)/5.0);
-    trail *= mask * foam;
-    float pulse = 0.55 + 0.45*sin(t*2.2 + oc_noise(p*0.45)*6.283);
-    c = mix(c, pal[4], smoothstep(0.8, 0.82, r1)*smoothstep(0.25, 0.35, mask)*0.3*foam);
-    c = mix(c, pal[5], lines*0.95*(1.0 - fx.z*0.35));   // night: foam stays quieter
-    c += pal[5]*(trail*0.08 + lines*pulse*0.12)*fx.z;   // night: soft moonlit foam, no strong glow
+    vec2 wperp = vec2(-uWind.y, uWind.x);
 
+    // 1. big cartoon patches: each area forms, holds, drifts downwind, then
+    //    dissolves into lace (holes open until only the outline is left), and
+    //    forms again a while later somewhere else
+    vec2 fd = p - uWind*(t*0.25 + fl*0.5);                         // drift with the wind
+    vec2 fq = vec2(dot(fd, uWind), dot(fd, wperp));
+    vec2 fc = fq*vec2(0.085, 0.13) + warp*0.3;
+    float life = fract(t*0.022 + oc_noise(fc*0.4 + 17.0)*2.5);
+    float grow = smoothstep(0.0, 0.22, life), fade = smoothstep(0.5, 0.95, life);
+    float shape = oc_fbm(fc + 31.0);
+    float thr = mix(0.7, 0.57, foam) + (1.0 - grow)*0.12;
+    float aa = max(fwidth(shape)*1.2, 0.004);
+    float body = smoothstep(thr, thr + aa, shape);
+    float rim = body * (1.0 - smoothstep(thr + 0.022, thr + 0.022 + aa, shape));   // clean outline band
+    float holes = oc_noise(fq*0.8 + warp*1.1 + 50.0);
+    float ht = mix(0.86, 0.34, fade);                                               // lace opens as it fades
+    float hole = smoothstep(ht - 0.015, ht, holes);
+    float fpatch = max(body*(1.0 - hole), rim*(1.0 - fade*0.35)) * (1.0 - smoothstep(0.85, 1.0, life));
+
+    // 2. crest foam: white caps that sit on the crests of the main swell (the
+    //    same waves the boat rides) and slide off the back as each crest passes
+    float wph = dot(p, uWind)*1.4 - fl*1.6;                          // matches the vertex wave
+    float wAcross = dot(p, wperp);
+    float wob = 0.35*sin(wAcross*0.7 + floor(wph/6.2832)*2.1);
+    float crestS = sin(wph + wob);
+    float tailS = sin(wph + wob + 0.55);                             // just behind the crest
+    float capId = floor((wph + wob)/6.2832 + 0.25);
+    float brk = oc_noise(vec2(wAcross*0.45, capId*3.7));             // each crest breaks in its own places
+    float capAmt = foam*(0.2 + uStorm*0.75);
+    // cap size swells and shrinks smoothly along the crest, so every cap is a
+    // tapered lens shape (no square ends)
+    float sCap = smoothstep(0.78 - capAmt*0.4, 0.98, brk + (oc_noise(vec2(wAcross*1.6, capId*5.1)) - 0.5)*0.12);
+    float w1 = 0.1*sCap, aaC = max(fwidth(crestS)*1.2, 0.004);
+    float cap = smoothstep(1.0 - w1, 1.0 - w1 + aaC, crestS) * step(0.01, sCap);
+    cap = max(cap, 0.75*smoothstep(1.0 - w1*0.55, 1.0 - w1*0.55 + aaC, tailS) * step(0.3, sCap));   // slides off the back
+
+    float foamAll = clamp(fpatch*0.95 + cap, 0.0, 1.0);
+    c = mix(c, pal[4], body*(1.0 - fpatch)*0.18*foam);               // faint tint inside the lace
+    c = mix(c, pal[5], foamAll*(1.0 - fx.z*0.35));                  // night: foam stays quieter
+    c += pal[5]*cap*0.1*fx.z;                                        // moonlit caps
 
     // drop ripples: crests catch the light, troughs darken; foam by day, glow by night
     // kept faint so the rings sit quietly on the surface
     c *= 1.0 + rH*0.1;
     c = mix(c, pal[5], clamp(rCrest*0.65 + rSplash, 0.0, 1.0)*(1.0 - fx.z*0.4));
-    c += mix(pal[4], pal[5], 0.5)*(rCrest*0.6 + rSplash)*fx.z*0.35;
+    c += GLOW*(rCrest*0.9 + rSplash)*fx.z*0.75;                          // glow cyan-blue at night
 
     // boat wake: a V of foam spreading back from the bow, churned water behind
     // the stern and a white splash at the bow, all growing with speed
@@ -139,7 +172,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
                    * (0.6 + 0.4*oc_noise(vec2(atan(ly, lx - bow)*6.0, t*5.0)));
       float wake = clamp(arm + wash*0.8 + splash, 0.0, 1.0);
       c = mix(c, pal[5], wake*0.85*(1.0 - fx.z*0.4));
-      c += mix(pal[4], pal[5], 0.5)*wake*fx.z*0.2;
+      c += GLOW*wake*fx.z*0.6;                                     // glowing wake at night
     }
 
     // foam rings around floating objects (boats, players)
@@ -153,20 +186,22 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       rf += (ring + wake*0.5)*O.w; rg += (ring + wake)*O.w*0.6;
     }
     c = mix(c, pal[5], clamp(rf, 0.0, 1.0)*0.75*(1.0 - fx.z*0.5));
-    c += mix(pal[4], pal[5], 0.5)*rg*fx.z*0.4;
+    c += GLOW*rg*fx.z*0.45;
 
     // cartoon twinkles: little 4-point stars that pop in and out
     vec2 sc = p*1.6, cell = floor(sc), f = fract(sc) - 0.5;
     float st = t*1.2, ph = fract(st);
     float on = step(mix(0.999, 0.994, uGlitter), oc_hash(cell + floor(st)));
     float starShape = smoothstep(0.34, 0.3, sqrt(abs(f.x)) + sqrt(abs(f.y))) * sin(ph*3.14159);
-    float sp = on * starShape * smoothstep(0.5, 0.55, v) * fx.x;
+    float sp = on * starShape * smoothstep(0.5, 0.55, v) * fx.x * (1.0 - uClouds*0.75);
     c = mix(c, pal[8], min(sp*1.4, 1.0));
     c += pal[8]*sp*fx.z*0.15;
 
     // flat cartoon cloud shadows drifting across the sea (daytime)
-    float cs = smoothstep(0.56, 0.575, oc_fbm(p*0.035 + vec2(t*0.012, t*0.006) + 40.0));
-    c = mix(c, c*vec3(0.74, 0.84, 0.92), cs*0.55*(1.0 - fx.z));
+    // more cover as the clouds build, faster and darker in a thunderstorm
+    float cth = 0.6 - uClouds*0.2;
+    float cs = smoothstep(cth, cth + 0.015, oc_fbm(p*0.035 + uWind*uCloudT*0.012 + vec2(0.0, uCloudT*0.004) + 40.0));
+    c = mix(c, c*vec3(0.74, 0.84, 0.92)*(1.0 - uThunder*0.25), cs*(0.5 + uThunder*0.25)*(1.0 - fx.z*0.8));
 
     // camera-relative frame, measured in camera heights so it holds at any zoom
     vec2 rel = vWPos.xz - cameraPosition.xz;
@@ -202,23 +237,64 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
       float len = 0.16 + 0.22*oc_hash(gc + 5.1);
       float dash = smoothstep(len, len*0.55, abs(gf.x)) * smoothstep(0.16, 0.08, abs(gf.y));   // thick enough to stay bright under the ink pass
       float gl = dash * step(0.8 - band*0.35*uRefl, oc_hash(gc + floor(t*0.8 + gh)*7.1)) * sin(ph*3.14159);
-      float refl = band * uRefl * (1.0 - uStorm*0.65) * (1.0 - cs*0.6);
+      float refl = band * uRefl * (1.0 - uStorm*0.65) * (1.0 - cs*0.6) * (1.0 - uClouds*0.9) * (1.0 - uFog*0.7);
       c += uLightCol * refl * (0.09 + gl*2.0);
     }
 
     // sky reflection on the far side, deeper up close
-    c = mix(c, pal[9], far*far*0.38);
-    c *= mix(0.84, 1.0, far);
+    c = mix(c, pal[9], far*far*0.3);
+    c *= mix(0.94, 1.0, far);
 
     // storms: the sea turns grey-green and darker (foam is already whipped up above)
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(lum)*vec3(0.82, 0.98, 0.94), uStorm*uStorm*0.7);
     c *= 1.0 - uStorm*0.2;
 
+    // overcast: flatter, greyer, a little darker
+    float lum2 = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(c, vec3(lum2)*vec3(0.95, 1.0, 1.02), uClouds*0.35);
+    c *= 1.0 - uClouds*0.12;
+
+    // rain: little rings popping all over the water, one per cell at a time
+    if (uRain > 0.01) {
+      vec2 rp = p*0.85, rc = floor(rp), rf = fract(rp);
+      float h = oc_hash(rc), per = 0.55 + h*0.5, rt = t/per + h*9.0, ri = floor(rt), rk = fract(rt);
+      vec2 ctr = vec2(oc_hash(rc + ri*1.7), oc_hash(rc + ri*2.3 + 4.0))*0.56 + 0.22;
+      float on2 = step(oc_hash(rc + ri*3.1 + 9.0), uRain*0.85);
+      float rr = length(rf - ctr), rad = rk*0.24;
+      float ring = smoothstep(0.026, 0.008, abs(rr - rad)) * (1.0 - rk) * on2;
+      float dot0 = smoothstep(0.04, 0.0, rr) * smoothstep(0.25, 0.0, rk) * on2;
+      c = mix(c, mix(pal[5], vec3(lum2), 0.3), clamp(ring*0.55 + dot0*0.6, 0.0, 1.0)*(1.0 - fx.z*0.4));
+      c += GLOW*ring*fx.z*0.25;
+      c *= 1.0 - uRain*0.06;
+    }
+
+    // rainbow after rain: a soft cartoon arc on the water, daytime only
+    if (uRainbow > 0.01) {
+      float al = dot(rel, uViewDir)/camH, ac = dot(rel, vec2(-uViewDir.y, uViewDir.x))/camH;
+      float rr2 = length(vec2(ac, al - 0.15)), rk2 = (rr2 - 0.95)/0.16;        // 0 … 1 across the band
+      if (rk2 > 0.0 && rk2 < 1.0) {
+        float band6 = floor(rk2*6.0);
+        vec3 rb = band6 < 1.0 ? vec3(0.58, 0.42, 0.95) : band6 < 2.0 ? vec3(0.35, 0.55, 1.0) : band6 < 3.0 ? vec3(0.35, 0.85, 0.6)
+                : band6 < 4.0 ? vec3(1.0, 0.92, 0.4) : band6 < 5.0 ? vec3(1.0, 0.65, 0.35) : vec3(1.0, 0.42, 0.45);
+        float ends = smoothstep(-0.1, 0.45, al - 0.15);                     // fades out toward the ends
+        float edge = smoothstep(0.0, 0.08, rk2) * smoothstep(1.0, 0.92, rk2);
+        c = mix(c, rb, edge*ends*uRainbow*0.4*(1.0 - fx.z));
+      }
+    }
+
+    // lightning: the whole sea lights up for a moment
+    c += (pal[8]*0.4 + vec3(0.55, 0.6, 0.8))*uFlash*0.6;
+
+    // fog: the water fades into soft grey-white with distance
+    float fdist = length(rel)/camH;
+    float fogK = uFog*(1.0 - exp(-pow(max(fdist - 0.35, 0.0)*1.1, 1.6)*(0.6 + uFog*2.2)));
+    c = mix(c, uFogCol, clamp(fogK + uFog*0.12, 0.0, 0.97));
+
     // haze into the sky colour toward the horizon, then fade out at the edge
     float dist = max(abs(vLP.x), abs(vLP.y));
     c = mix(c, mix(pal[9], pal[1], 0.22), smoothstep(uHalf*0.6, uHalf - uFade*0.3, dist) * 0.9);
 
-    diffuseColor.rgb = c * 0.12;
+    diffuseColor.rgb = c * 0.12;   // lit + emissive below ≈ the palette colour, not brighter
     diffuseColor.a = smoothstep(uHalf, uHalf - uFade, dist);
   }`;
