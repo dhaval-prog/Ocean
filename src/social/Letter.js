@@ -26,6 +26,8 @@ const ICONS = {
   eraser: '<svg viewBox="0 0 24 24"><path d="M5 15l8-8 6 6-6 6H9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 19h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   sparkle: '<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" fill="currentColor"/><path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" fill="currentColor"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="7" y="5.5" width="3.6" height="13" rx="1" fill="currentColor"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1" fill="currentColor"/></svg>',
+  dictate: '<svg viewBox="0 0 24 24"><path d="M3.5 7.5h8M3.5 11.5h6.5M3.5 15.5h4.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><rect x="14.6" y="3.5" width="5" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.8 10.6a4.3 4.3 0 0 0 8.6 0M17.1 15v3.5M15 18.5h4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   clip: '<svg viewBox="0 0 24 40"><path d="M8 34V9a4 4 0 0 1 8 0v22a2.5 2.5 0 0 1-5 0V12" fill="none" stroke="#9aa3b2" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -78,7 +80,8 @@ export class Letter {
           <button type="button" data-tool="clear" class="tool" aria-label="Clear doodles" hidden>${ICONS.eraser}</button>
           <button type="button" data-tool="pen" class="tool" aria-label="Doodle with the pen" aria-pressed="false">${ICONS.pen}</button>
           <button type="button" data-act="camera" aria-label="Add a photo">${ICONS.camera}</button>
-          <button type="button" data-act="mic" class="primary" aria-label="Record a voice note">${ICONS.mic}</button>
+          <button type="button" data-act="mic" class="primary" aria-label="Record a voice note">${ICONS.mic}<i class="del" aria-hidden="true">×</i></button>
+          <button type="button" data-act="dictate" aria-label="Speak to write" aria-pressed="false">${ICONS.dictate}</button>
           <button type="button" data-act="bell" aria-label="Remind me">${ICONS.bell}</button>
           <button type="button" data-act="inbox" aria-label="Letters in your inbox">${ICONS.inbox}<span class="badge">${INBOX}</span></button>
           <button type="button" data-tool="decor" class="tool" aria-label="Stickers" aria-expanded="false">${ICONS.sparkle}</button>
@@ -393,7 +396,9 @@ export class Letter {
     this.el.querySelector('[data-act=camera]').addEventListener('click', e => { e.stopPropagation(); this.file.click(); });
     this.file.addEventListener('change', () => { const f = this.file.files?.[0]; if (f) this._addPhoto(f); this.file.value = ''; });
     this.el.querySelector('[data-act=mic]').addEventListener('click', e => { e.stopPropagation(); this._toggleVoice(); });
-    this.voiceEl.querySelector('.vplay').addEventListener('click', e => { e.stopPropagation(); if (this.voice?.url) new Audio(this.voice.url).play().catch(() => {}); });
+    this.voiceEl.querySelector('.vplay').addEventListener('click', e => { e.stopPropagation(); this._playVoice(); });
+    this.voiceEl.addEventListener('pointerdown', e => e.stopPropagation());
+    this.el.querySelector('[data-act=dictate]').addEventListener('click', e => { e.stopPropagation(); this._toggleDictation(); });
   }
 
   _toggleTray(open = this.tray.hidden) {
@@ -435,6 +440,8 @@ export class Letter {
   async _toggleVoice() {
     const mic = this.el.querySelector('[data-act=mic]');
     if (this._rec) { this._rec.stop(); return; }
+    if (this.voice?.url) { this._deleteVoice(); return; }                // a voice note already: the mic button deletes it
+    if (this._sr) this._stopDictation();                                  // one thing on the microphone at a time
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { this._toast('Voice notes need a microphone'); return; }
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
@@ -446,7 +453,7 @@ export class Letter {
     rec.ondataavailable = e => chunks.push(e.data);
     this.voice = { peaks, url: null, y: 0.66 };
     this.voiceEl.hidden = false; this.voiceEl.classList.add('rec');
-    mic.innerHTML = ICONS.stop; mic.classList.add('on'); mic.setAttribute('aria-label', 'Stop recording');
+    mic.firstElementChild.outerHTML = ICONS.stop; mic.classList.add('on'); mic.setAttribute('aria-label', 'Stop recording');
     let last = 0;
     const tick = now => {
       if (rec.state !== 'recording') return;
@@ -462,11 +469,79 @@ export class Letter {
       stream.getTracks().forEach(t => t.stop()); ac.close();
       this.voice.url = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
       this.voiceEl.classList.remove('rec');
-      mic.innerHTML = ICONS.mic; mic.classList.remove('on'); mic.setAttribute('aria-label', 'Record a voice note');
+      mic.firstElementChild.outerHTML = ICONS.mic; mic.classList.remove('on');
+      mic.classList.add('has-voice'); mic.setAttribute('aria-label', 'Delete the voice note');
       this._rec = null; this._drawVoice();
     };
     rec.start(); this._rec = rec; requestAnimationFrame(tick);
     setTimeout(() => this._rec === rec && rec.stop(), 20000);       // up to 20 s
+  }
+
+  /** Play the voice note again (tap again to pause; it goes back to the start when it ends). */
+  _playVoice() {
+    if (!this.voice?.url) return;
+    const b = this.voiceEl.querySelector('.vplay');
+    if (!this._audioEl || this._audioEl._url !== this.voice.url) {
+      this._audioEl?.pause();
+      const a = new Audio(this.voice.url); a._url = this.voice.url; a.preload = 'auto';
+      a.onended = a.onpause = () => { b.innerHTML = ICONS.play; b.setAttribute('aria-label', 'Play the voice note'); this.voiceEl.classList.remove('playing'); };
+      a.onplay = () => { b.innerHTML = ICONS.pause; b.setAttribute('aria-label', 'Pause the voice note'); this.voiceEl.classList.add('playing'); };
+      this._audioEl = a;
+    }
+    const a = this._audioEl;
+    if (a.paused) { if (a.ended) a.currentTime = 0; a.play().catch(() => this._toast('Could not play the voice note')); } else a.pause();
+  }
+
+  /** Delete the voice note (the mic button, once there is one). */
+  _deleteVoice() {
+    this._audioEl?.pause(); this._audioEl = null;
+    if (this.voice?.url) URL.revokeObjectURL(this.voice.url);
+    this.voice = null; this.voiceEl.hidden = true; this._audioEl?.pause(); this._audioEl = null; this._stopDictation();
+    this.el.querySelector('[data-act=mic]').classList.remove('has-voice'); this.voiceEl.classList.remove('playing');
+    const mic = this.el.querySelector('[data-act=mic]');
+    mic.classList.remove('has-voice'); mic.setAttribute('aria-label', 'Record a voice note');
+    this.audio?.rustle(); this._tick(); this._toast('Voice note deleted');
+    this._syncHint();
+  }
+
+  // --- speak to write: what you say is written on the letter as you say it -------------
+  _toggleDictation() {
+    if (this._sr) { this._stopDictation(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { this._toast('Speech to text isn\'t available in this browser'); return; }
+    if (this._rec) this._rec.stop();                                       // one thing on the microphone at a time
+    const b = this.el.querySelector('[data-act=dictate]'), t = this.text, max = +t.maxLength || 400;
+    const sr = new SR(); sr.continuous = true; sr.interimResults = true; sr.lang = navigator.language || 'en-US';
+    let prefix = '', finals = '';
+    const begin = () => {
+      const v = t.value; prefix = v + (v && !/\s$/.test(v) ? ' ' : ''); finals = '';
+      try { sr.start(); } catch {}
+    };
+    const cap = (s, after) => (!after.trim() || /[.!?]\s*$/.test(after) ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+    sr.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i], said = r[0].transcript;
+        if (r.isFinal) finals += said; else interim += said;
+      }
+      const spoken = (finals + interim).replace(/^\s+/, '');
+      const next = (prefix + cap(spoken, prefix)).slice(0, max);
+      if (next !== t.value) { t.value = next; this._onInput({ inputType: 'insertText' }); }
+    };
+    sr.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { this._toast('Microphone permission was not given'); this._stopDictation(); }
+    };
+    sr.onend = () => { if (this._sr === sr && !this._srStopping) begin(); else this._dictationOff(); };   // phones stop after a pause: carry on
+    this._sr = sr; this._srStopping = false;
+    b.classList.add('on', 'listening'); b.setAttribute('aria-pressed', 'true'); b.setAttribute('aria-label', 'Stop speaking to write');
+    this.text.blur(); this._coachOff(); this._toast('Listening… speak and it writes');
+    begin();
+  }
+  _stopDictation() { if (!this._sr) return; this._srStopping = true; try { this._sr.stop(); } catch {} this._dictationOff(); }
+  _dictationOff() {
+    this._sr = null;
+    const b = this.el.querySelector('[data-act=dictate]');
+    b.classList.remove('on', 'listening'); b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-label', 'Speak to write');
   }
 
   /** The voice note as a wavy ink line across the paper (always a gentle wave, bigger when louder). */
@@ -793,6 +868,7 @@ export class Letter {
   onMode(mode) {
     const writing = mode === 'card' || mode === 'held';
     const rowOn = writing || mode === 'shaping' || mode === 'fold' || mode === 'plane' || mode === 'bottle';
+    if (mode !== 'card' && mode !== 'held') { this._stopDictation(); this._audioEl?.pause(); }   // leaving the letter: stop listening / playing
     if (mode === 'shaping') {                                    // folding / rolling by hand: the letter goes onto the paper
       this.text.blur(); this._toggleTray(false);
       this.seq.paint(this._composition()); this._shaped = true;
