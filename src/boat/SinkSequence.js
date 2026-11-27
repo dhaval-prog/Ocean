@@ -21,8 +21,10 @@ const planeTilt = k => 0.12 * k + (PLANE_TILT - 0.12) * smoothstep(0.62, 1, k);
  *  so its top faces you and the keel hangs below the wings (the T you see from behind). */
 const planeQ = (k, bank = 0) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -planeTilt(k))
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * smoothstep(0.62, 1, k) + bank));
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
+if (REDUCED) { DUR.fold *= 0.55; DUR.plane *= 0.6; DUR.bottle *= 0.6; DUR.reform *= 0.6; }   // reduced motion: quicker folds and flights
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 const backOut = k => { const c = 1.6; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
@@ -166,8 +168,31 @@ export class SinkSequence {
   /** Steer the folded plane with the finger (−1 left … +1 right): it banks its wings that way. */
   setSteer(v) { this.steer = Math.max(-1, Math.min(1, v)); }
 
-  /** A strong gust shoves the plane sideways (dir −1 left, +1 right). */
-  gust(dir) { this._gust = { dir, t0: this._now }; }
+  /** A strong gust shoves the plane sideways (dir −1 left, +1 right); just a nudge with reduced motion. */
+  gust(dir) { this._gust = { dir: REDUCED ? dir * 0.3 : dir, t0: this._now }; }
+
+  /** Rubber band at the ends of a fold / roll: how far (screen-down, world units) the finger pulls past the end. */
+  setStretch(v) { this._stretchTo = v; }
+
+  /**
+   * Take a thrown letter back (while it flies, or just after it arrived): the paper
+   * comes back flat in front of you to write on again.
+   */
+  unsend() {
+    if (!['plane', 'bottle', 'reform'].includes(this.mode)) return false;
+    const P = this.paper, B = this.boat, tg = this._cardTarget();
+    B.group.visible = false; B.sinkY = -2.6; B.sinkRoll = 0.5; B.sinkPitch = 0.25; B.frozen = true;
+    this.bottle.visible = false; this._planeEnd = null; this._gust = null; this.steer = 0; this._bank = 0;
+    if (!P.visible) {                                                     // already arrived: it comes back from their circle
+      const tgt = this.planeTarget?.() || { x: this.dom.clientWidth / 2, y: 60 };
+      P.position.copy(this._screenToWorld(tgt.x, tgt.y, tg.D * 0.6)); P.quaternion.copy(tg.q);
+    }
+    this._flatten(); P.scale.setScalar(1); P.visible = true;
+    this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
+    this._dry = true;                                                     // it never touched the water
+    this.setMode('toScreen');
+    return true;
+  }
 
   /** Glide to −1, 0 or +1; back at 0 it is the flat letter again. */
   snapShape(target) { this._shapeTarget = target; }
@@ -466,8 +491,8 @@ export class SinkSequence {
       P.position.lerpVectors(this._fromP, tg.p, k);
       P.quaternion.slerpQuaternions(this._fromQ, tg.q, k);
       this._bend(t, 0.6 * (1 - k));
-      this.wet.value = 0.45 - 0.2 * k;
-      this._drip(dt, P, 0.2);
+      this.wet.value = this._dry ? 0 : 0.45 - 0.2 * k;
+      if (!this._dry) this._drip(dt, P, 0.2);
       if (k >= 1) this.setMode('hover', this.t0 + DUR.toScreen * 1000);
     } else if (this.mode === 'hover') {
       // a short pause in front of you: a little springy bounce and a gentle sway, then it settles
@@ -478,8 +503,8 @@ export class SinkSequence {
       P.position.copy(tg.p).addScaledVector(up, bounce).addScaledVector(rt, sway * 0.07);
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bounce * 0.8, sway * 0.1, -sway * 0.12)));
       this._bend(t, 0.25 * Math.exp(-t * 4) + 0.02);
-      this.wet.value = 0.25 * (1 - k);                                  // the last damp edges dry off
-      if (k >= 1) { this.wet.value = 0; this.setMode('card', this.t0 + DUR.hover * 1000); }
+      this.wet.value = this._dry ? 0 : 0.25 * (1 - k);                   // the last damp edges dry off
+      if (k >= 1) { this.wet.value = 0; this._dry = false; this.setMode('card', this.t0 + DUR.hover * 1000); }
     } else if (this.mode === 'card') {
       // the paper breathes: it rises and falls gently with the waves under it, and
       // the corner nearest where you're typing lifts a little
@@ -518,6 +543,8 @@ export class SinkSequence {
         if (p >= 1) this._gust = null;
       }
       P.position.addScaledVector(new V3(1, 0, 0).applyQuaternion(tg.q), gx);
+      this._stretch = (this._stretch || 0) + ((this._stretchTo || 0) - (this._stretch || 0)) * Math.min(1, dt * 16);
+      P.position.addScaledVector(up, -this._stretch);                    // pulled past the end: it gives a little, then springs back
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 + gFl, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv + gYaw : 0)));   // a plane dips its nose away from you
       if (sv > 0) P.quaternion.multiply(planeQ(sv, 0.55 * this._bank + gRoll));   // nose away, turned over, banking about its nose (steer right: left wing up)
       const Bt = this.bottle;

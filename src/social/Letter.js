@@ -30,6 +30,12 @@ const ICONS = {
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** How far a finger may wobble before a touch counts as a drag (more on phones). */
+const slop = () => (COARSE ? 15 : 10);
+/** Touches starting right at the screen's side edges belong to the browser (iPhone back swipe). */
+const nearEdge = e => e.pointerType !== 'mouse' && (e.clientX < 20 || e.clientX > window.innerWidth - 20);
 
 export class Letter {
   constructor({ root, seq, hint }) {
@@ -72,6 +78,7 @@ export class Letter {
       <div class="voice" hidden><canvas></canvas><button type="button" class="vplay" aria-label="Play the voice note">${ICONS.play}</button></div>
       <div class="sign" aria-hidden="true"></div>
       <div class="sparks" aria-hidden="true"></div>
+      <div class="pen-pill" hidden>Drawing <button type="button" aria-label="Done drawing">✓ Done</button></div>
       <div class="letter-actions">
         <div class="acts-track">
           <button type="button" data-tool="clear" class="tool" aria-label="Clear doodles" hidden>${ICONS.eraser}</button>
@@ -156,7 +163,10 @@ export class Letter {
     // anywhere else on the letter screen: swipe left / right to choose, flick up / down to send
     let sw = null;
     root.addEventListener('pointerdown', e => {
-      if (!this.visible || e.target.closest('.letter, .peek')) return;
+      if (this._menu && !e.target.closest('.lmenu')) this._closeMenu();
+      if (!this.visible || e.target.closest('.letter, .peek, .unsend, .lmenu')) return;
+      if (this.pen && !e.target.closest('.people')) this._setPen(false);      // a tap outside the paper ends drawing
+      if (nearEdge(e)) return;
       if (this._shapeable() && !e.target.closest('.people, button')) { this._startShape(e, false); return; }   // fold / roll it by hand
       sw = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
     }, { capture: true });
@@ -164,14 +174,11 @@ export class Letter {
       if (!sw || sw.id !== e.pointerId) return;
       const s0 = sw; sw = null;
       if (this.circles?.busy) return;                                        // a contact is being dragged / peeked
-      const dx = e.clientX - s0.x, dy = e.clientY - s0.y, ms = performance.now() - s0.t;
+      const dx = e.clientX - s0.x, dy = e.clientY - s0.y;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = performance.now(); }
-      else if (Math.abs(dy) > Math.abs(dx) * 1.3 && !e.target.closest('button') && ((Math.abs(dy) > 50 && ms < 700) || Math.abs(dy) > 120)) {
-        this.text.blur();
-        this.seq.flick(0, Math.sign(dy));                                     // up: paper plane, down: bottle
-      }
     });
     window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') this._closeMenu();
       if (!this.visible || e.target === this.text) return;
       if (e.key === 'ArrowRight') this.select(this.index + 1);
       if (e.key === 'ArrowLeft') this.select(this.index - 1);
@@ -217,9 +224,11 @@ export class Letter {
     const m = this.seq.mode, v = this.seq.shapeS || 0;
     let text = null;
     if (!this.visible) text = null;
-    else if (m === 'shaping') text = v >= 0.99 ? 'Flick up to throw · drag up to unfold' : v <= -0.99 ? 'Flick up to throw · drag down to unroll' : null;
-    else if (m === 'card') text = !this.hasContent() ? 'Swipe to choose · flick to send'
-      : document.activeElement === this.text ? null : 'Drag down: paper plane · drag up: bottle';
+    else if (this.pen && m === 'card') text = null;
+    else if (m === 'shaping') text = v >= 0.99 ? (this.learned ? 'Flick to throw · slide sideways to steer' : 'Keep pulling down and let go fast to throw · slide sideways to steer · drag up to unfold')
+      : v <= -0.99 ? (this.learned ? 'Flick up to drop it in the sea' : 'Keep pushing up and let go fast to drop it in the sea · drag down to unroll') : null;
+    else if (m === 'card') text = document.activeElement === this.text ? null
+      : this.learned ? '↓ paper plane · ↑ bottle · swipe to choose' : 'Drag down: paper plane · drag up: bottle · swipe sideways to choose · hold for more';
     if (text) this.hint.textContent = text;
     this.hint.hidden = !text;
   }
@@ -355,6 +364,17 @@ export class Letter {
     a.scrollLeft = m.offsetLeft + m.offsetWidth / 2 - a.clientWidth / 2;
   }
 
+  /** Drawing with the pen on or off (while on, a pill says so; ✓, a tap outside the paper or a second finger ends it). */
+  _setPen(on) {
+    this.pen = on;
+    const b = this.el.querySelector('.letter-actions [data-tool=pen]');
+    b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
+    this.el.classList.toggle('pen-on', on); this.el.querySelector('[data-tool=clear]').hidden = !on;
+    this.el.querySelector('.pen-pill').hidden = !on;
+    if (on) { this.text.blur(); this._coachOff(); }
+    this._syncHint();
+  }
+
   // --- tools: pen, decorate tray, photo, voice -------------------------------------
   _bindTools() {
     const tools = this.el.querySelector('.letter-actions');
@@ -363,13 +383,13 @@ export class Letter {
       const b = e.target.closest('[data-tool]'); if (!b) return;
       e.stopPropagation();
       const t = b.dataset.tool;
-      if (t === 'pen') {
-        this.pen = !this.pen; b.setAttribute('aria-pressed', String(this.pen)); b.classList.toggle('on', this.pen);
-        this.el.classList.toggle('pen-on', this.pen); this.el.querySelector('[data-tool=clear]').hidden = !this.pen;
-        if (this.pen) this.text.blur();
-      } else if (t === 'clear') { this.strokes = []; this._redrawDoodles(); }
+      if (t === 'pen') this._setPen(!this.pen);
+      else if (t === 'clear') { this.strokes = []; this._redrawDoodles(); }
       else if (t === 'decor') this._toggleTray();
     });
+    const pill = this.el.querySelector('.pen-pill');
+    pill.addEventListener('pointerdown', e => e.stopPropagation());
+    pill.querySelector('button').addEventListener('click', e => { e.stopPropagation(); this._setPen(false); });
     this.tray.addEventListener('pointerdown', e => e.stopPropagation());
     this.tray.addEventListener('click', e => {
       e.stopPropagation();
@@ -492,8 +512,19 @@ export class Letter {
     let press = null;
     const box = () => this.el.getBoundingClientRect();
     const toUV = e => { const b = box(); return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height]; };
+    const down = new Set();                                                 // fingers on the paper
+    this.el.addEventListener('contextmenu', e => { e.preventDefault(); if (this.seq.mode === 'card') this._openMenu(e.clientX, e.clientY); });
+    window.addEventListener('pointerup', e => down.delete(e.pointerId));
+    window.addEventListener('pointercancel', e => down.delete(e.pointerId));
     this.el.addEventListener('pointerdown', e => {
-      if (e.target.closest('button, .tray, .letter-actions')) return;
+      if (e.target.closest('button, .tray, .letter-actions, .pen-pill')) return;
+      down.add(e.pointerId);
+      this._coachOff();
+      if (this.pen && down.size > 1) {                                       // a second finger: drawing ends
+        if (press?.mode === 'pen') { this.strokes.pop(); this._redrawDoodles(); press = null; }
+        this._setPen(false); return;
+      }
+      if (nearEdge(e)) return;
       const item = e.target.closest('.stk, .polaroid');
       if (item) {                                                           // move a sticker / the photo
         const s = item === this.photo?.el ? this.photo : this.stickers.find(k => k.el === item);
@@ -519,7 +550,7 @@ export class Letter {
       if (press.mode === 'pen') { press.stroke.pts.push(toUV(e)); this._redrawDoodles(); return; }
       if (press.mode) return;
       const dx = e.clientX - press.x, dy = e.clientY - press.y;
-      if (Math.hypot(dx, dy) < 10) return;
+      if (Math.hypot(dx, dy) < slop()) return;
       this.text.blur();
       if (Math.abs(dx) > Math.abs(dy) * 1.15) press.mode = 'swipe';      // sideways: choose someone else
       else { press.mode = 'grab'; this.seq.grab({ pointerId: e.pointerId, clientX: press.x, clientY: press.y }); }   // up / down: pick it up
@@ -544,64 +575,86 @@ export class Letter {
     });
   }
 
-  // --- folding and rolling by hand (once something is on the letter) ------------------
-  //   drag down from the letter  → it folds into a paper plane, step by step
-  //   plane: flick up → throw it; drag up → unfold it step by step
-  //   drag up from the letter    → it rolls up, step by step, and goes into a bottle
-  //   bottle: flick up → throw it; drag down → unroll it back into the letter
-  // Each drag stops at the flat letter; letting go part-way settles to the nearest shape.
+  // --- folding and rolling by hand ----------------------------------------------------
+  //   drag down → it folds into a paper plane, fold by fold; keep pulling and let go fast to throw it
+  //               (a finished plane can also be flicked up); drag up → it unfolds
+  //   drag up   → it rolls up into a bottle, step by step; keep pushing and let go fast to drop it
+  //               in the sea; drag down → it unrolls
+  //   letting go: a quick pull finishes the shape, a quick pull back undoes it, otherwise the
+  //   nearest; past either end it gives a little (rubber band)
+  //   holding the finished plane: sideways steers (and picks the friend on that side), up / down
+  //   folds or throws, never both in one movement
+  //   press and hold the flat letter (or right-click): a menu with buttons for all of it
 
   /** True when the letter has something on it (words, stickers, a doodle, a photo, a voice note). */
   hasContent() { return !!(this.text.value.trim() || this.stickers.length || this.strokes.length || this.photo || this.voice?.peaks?.length); }
 
   _shapeable() {
     const m = this.seq.mode;
-    return !this.pen && (m === 'shaping' || (m === 'card' && this.hasContent()));
+    return !this.pen && (m === 'shaping' || m === 'card');               // blank or written: the same gestures
   }
 
   _startShape(e, onPaper) {
-    const g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), onPaper, axis: null, side: null, s0: this.seq.mode === 'shaping' ? this.seq.shapeS : 0, trail: [] };
+    const g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), onPaper, axis: null, side: null,
+      s0: this.seq.mode === 'shaping' ? this.seq.shapeS : 0, trail: [{ x: e.clientX, y: e.clientY, t: performance.now() }], anchor: null };
     this._shapeG = g;
     const R = () => Math.max(220, window.innerHeight * 0.42);           // drag distance for a full fold
+    const done = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      clearTimeout(g.lp); this._shapeG = null;
+      this.seq.setSteer?.(0); this.seq.setStretch?.(0); this._aim(null);
+    };
+    // press and hold the flat letter (without moving): a menu with buttons for every gesture
+    if (onPaper && this.seq.mode === 'card') g.lp = setTimeout(() => { if (!g.axis && this._shapeG === g) { done(); this._openMenu(g.x0, g.y0); } }, 550);
     const move = ev => {
       if (ev.pointerId !== g.id) return;
-      const dx = ev.clientX - g.x0, dy = ev.clientY - g.y0;
-      g.trail.push({ y: ev.clientY, t: performance.now() }); if (g.trail.length > 10) g.trail.shift();
+      const dx = ev.clientX - g.x0, dy = ev.clientY - g.y0, now = performance.now();
+      g.trail.push({ x: ev.clientX, y: ev.clientY, t: now }); if (g.trail.length > 12) g.trail.shift();
       if (!g.axis) {
-        if (Math.hypot(dx, dy) < 10) return;
-        g.axis = g.s0 >= 0.97 ? 'y' : Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';   // a finished plane: held, it can be steered too
+        if (Math.hypot(dx, dy) < slop()) return;
+        clearTimeout(g.lp);
+        const finished = Math.abs(g.s0) >= 0.97;
+        g.axis = finished ? 'y' : Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';
         if (g.axis === 'y') {
-          this.text.blur(); this._toggleTray(false);
-          g.side = g.s0 > 0 ? 'plane' : g.s0 < 0 ? 'bottle' : dy > 0 ? 'plane' : 'bottle';
+          this.text.blur(); this._toggleTray(false); this._coachOff();
+          g.side = g.s0 > 0 ? 'plane' : g.s0 < 0 ? 'bottle' : dy > 0 ? 'plane' : 'bottle';   // down: paper plane · up: bottle
           if (this.seq.mode === 'card') this.seq.beginShape();
-          g.step = Math.floor(Math.abs(g.s0) * 4);
+          g.step = Math.floor(Math.abs(g.s0) * 8 + 0.001); g.atEnd = finished;
         }
       }
       if (g.axis !== 'y') return;
-      let v = g.s0 + dy / R();
-      v = g.side === 'plane' ? Math.max(0, Math.min(1, v)) : Math.max(-1, Math.min(0, v));
-      if (g.xa != null && ev.clientY - g.ya < 70) v = 1;                  // steering: a sideways finger doesn't unfold it
-      // the folded plane, held: turn the finger left / right to bank toward the friend on that side
-      if (g.side === 'plane' && v >= 0.99) {
-        if (g.xa == null) { g.xa = ev.clientX; g.ya = ev.clientY; }
-        const sx = ev.clientX - g.xa;
-        this.seq.setSteer(sx / 90);
-        if (Math.abs(sx) > 80) {
-          const dir = sx > 0 ? 1 : -1, before = this.index;
-          this.select(this.index + dir);
-          if (this.index !== before) { this.seq.gust(dir); this._windGust(dir); this.seq.paint(this._composition()); this.audio?.rustle(); }
-          g.xa = ev.clientX;
-        }
-      } else if (g.xa != null) { g.xa = null; this.seq.setSteer(0); }
+      const end = g.side === 'plane' ? 1 : -1, raw = g.s0 + dy / R();
+      let v = g.side === 'plane' ? clamp(raw, 0, 1) : clamp(raw, -1, 0);
+      // the finished plane, held: each movement is either sideways (steer) or up / down (fold, throw), never both
+      if (g.side === 'plane' && !g.anchor && v >= 0.99) g.anchor = { x: ev.clientX, y: ev.clientY, lock: null };
+      if (g.anchor) {
+        const ax = ev.clientX - g.anchor.x, ay = ev.clientY - g.anchor.y;
+        if (!g.anchor.lock && Math.hypot(ax, ay) > slop()) g.anchor.lock = Math.abs(ax) > Math.abs(ay) * 1.2 ? 'steer' : 'vert';
+        if (g.anchor.lock === 'steer') {
+          v = 1; this.seq.setSteer(ax / 90);
+          this._aim(Math.abs(ax) > 25 ? this.index + Math.sign(ax) : null);   // light up the friend it's heading for
+          if (Math.abs(ax) > 80) {
+            const dir = Math.sign(ax), before = this.index;
+            this.select(this.index + dir);
+            if (this.index !== before) { this.seq.gust(dir); this._windGust(dir); this.seq.paint(this._composition()); this.audio?.rustle(); }
+            g.anchor.x = ev.clientX; this._aim(null);
+          }
+        } else if (v < 0.97) g.anchor = null;                            // unfolding again
+      }
+      // rubber band: pulling past either end gives a little, with resistance
+      const over = g.anchor?.lock === 'steer' ? 0 : (raw - v) * R();
+      this.seq.setStretch(Math.sign(over) * 0.22 * Math.tanh(Math.abs(over) / 160));
       this.seq.setShapeS(v);
-      const step = Math.floor(Math.abs(v) * 4 + 0.001);                  // a fold step: a tick and a paper sound
-      if (step !== g.step) { g.step = step; this._tick(); this.audio?.[step % 2 ? 'rustle' : 'scratch'](); }
+      const step = Math.floor(Math.abs(v) * 8 + 0.001);                  // each fold step: a tick and its own crease sound
+      if (step !== g.step) { g.step = step; this._tick(); this.audio?.crease?.(step); }
+      const atEnd = Math.abs(v - end) < 0.01;
+      if (atEnd && !g.atEnd) { this._tickStrong(); this.audio?.ready?.(); }   // finished: a firmer snap
+      g.atEnd = atEnd;
       this._syncHint();
     };
     const up = ev => {
       if (ev.pointerId !== g.id) return;
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
-      this._shapeG = null; this.seq.setSteer?.(0);
+      done();
       const dx = ev.clientX - g.x0, now = performance.now();
       if (!g.axis) {                                                      // a tap: write (on the flat letter)
         if (g.onPaper && this.seq.mode === 'card') { this.text.focus(); const n = this.text.value.length; this.text.setSelectionRange(n, n); }
@@ -611,26 +664,95 @@ export class Letter {
         if (Math.abs(dx) > 40) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = now; if (this.seq.mode === 'shaping') this.seq.paint(this._composition()); }
         return;
       }
-      const recent = g.trail.find(q => now - q.t < 200) || g.trail[0];
-      const vy = recent ? (ev.clientY - recent.y) / Math.max(0.016, (now - recent.t) / 1000) : 0;   // px / s (negative = up)
-      const quick = now - g.t0 < 500 && ev.clientY < g.y0 - 50;           // a short, quick swipe up counts too
-      const flickUp = (vy < -650 && ev.clientY < g.y0 - 25) || quick;
-      const done = g.s0 >= 0.97 ? 1 : g.s0 <= -0.97 ? -1 : 0;             // a finished plane (+1) or bottle (−1)
-      if (flickUp && done) {                                              // throw it
-        this.seq.setShapeS(done);
-        this.seq.throwShape();
+      if (this.seq.mode !== 'shaping') return;
+      const end = g.side === 'plane' ? 1 : -1, v = this.seq.shapeS;
+      if (g.anchor?.lock === 'steer') { this.seq.snapShape(end); return; }   // steering never throws
+      // finger speed over the last ~120 ms (px/s, + = down), and along the shaping direction
+      let ri = g.trail.findIndex(q => now - q.t < 120); if (ri < 0) ri = g.trail.length - 1;
+      const ref = g.trail[Math.max(0, Math.min(ri, g.trail.length - 2))];   // at least one move back (slow frames)
+      const vy = (ev.clientY - ref.y) / Math.max(0.016, (now - ref.t) / 1000), along = vy * end;
+      const atEnd = Math.abs(v - end) < 0.02;
+      const flickUpPlane = g.side === 'plane' && g.s0 >= 0.97 && vy < -650 && ev.clientY < g.y0 - 25 && now - g.t0 < 600;
+      if ((atEnd && along > 650) || flickUpPlane) {                        // keep going and let go fast (or flick a plane up): throw
+        this.seq.setShapeS(end); this.seq.throwShape(); this._markLearned();
         return;
       }
-      const v = this.seq.shapeS;
-      if (done && flickUp === false && Math.abs(v - done) < 0.02) return;  // at the end already, nothing changed
-      this.seq.snapShape(g.side === 'plane' ? (v > 0.5 ? 1 : 0) : (v < -0.5 ? -1 : 0));
+      // settle: a quick pull finishes the fold, a quick pull back undoes it, otherwise the nearest
+      const target = along > 500 ? end : along < -500 ? 0 : Math.abs(v) > 0.5 ? end : 0;
+      if (target === end && !atEnd) { this._tickStrong(); this.audio?.ready?.(); }
+      this.seq.snapShape(target);
       setTimeout(() => this._syncHint(), 350);
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   }
 
+  /** Light up the circle the held plane is heading for (null: none). */
+  _aim(i) {
+    this.people.forEach((b, k) => b.classList.toggle('aim', i != null && k === i && k !== this.index));
+  }
+
+  _tickStrong() { try { if (navigator.vibrate) navigator.vibrate([12, 40, 22]); else { this._haptic?.click(); setTimeout(() => this._haptic?.click(), 70); } } catch {} }
+
+  get learned() { try { return localStorage.getItem('ocean.gesturesLearned') === '1'; } catch { return false; } }
+  _markLearned() { try { localStorage.setItem('ocean.gesturesLearned', '1'); } catch {} this._coachOff(); }
+
+  // --- first letter: a finger shows the two gestures ---------------------------------
+  _coach() {
+    if (this.learned || this._coachEl || this._coached) return;
+    this._coached = true;
+    const c = document.createElement('div'); c.className = 'coach'; c.setAttribute('aria-hidden', 'true');
+    c.innerHTML = '<i class="finger"></i><span class="lbl down">Drag down · paper plane</span><span class="lbl up">Drag up · bottle</span>';
+    this.el.appendChild(c); this._coachEl = c;
+    this._coachT = setTimeout(() => this._coachOff(), 9800);
+  }
+  _coachOff() { clearTimeout(this._coachT); this._coachEl?.remove(); this._coachEl = null; }
+
+  // --- press and hold: every gesture as a button -------------------------------------
+  _openMenu(x, y) {
+    this._closeMenu();
+    this.text.blur(); this._tick();
+    const m = document.createElement('div'); m.className = 'lmenu'; m.setAttribute('role', 'menu');
+    const prev = this.recipients[this.index - 1], next = this.recipients[this.index + 1];
+    m.innerHTML = `<button type="button" role="menuitem" data-m="plane">Send as paper plane</button>
+      <button type="button" role="menuitem" data-m="bottle">Send in a bottle</button>
+      ${prev ? `<button type="button" role="menuitem" data-m="prev">← ${esc(prev.name)}</button>` : ''}
+      ${next ? `<button type="button" role="menuitem" data-m="next">${esc(next.name)} →</button>` : ''}`;
+    const root = this.row.parentNode; root.appendChild(m);
+    const w = 210, h = m.offsetHeight || 170;
+    m.style.left = clamp(x - w / 2, 10, window.innerWidth - w - 10) + 'px';
+    m.style.top = clamp(y - h - 16, 10, window.innerHeight - h - 10) + 'px';
+    m.addEventListener('pointerdown', e => e.stopPropagation());
+    m.addEventListener('click', e => {
+      const b = e.target.closest('[data-m]'); if (!b) return;
+      e.stopPropagation(); this._closeMenu();
+      const k = b.dataset.m;
+      if (k === 'plane' || k === 'bottle') { this._coachOff(); this.seq.send(k); }
+      else this.select(this.index + (k === 'next' ? 1 : -1));
+    });
+    this._menu = m;
+    m.querySelector('button')?.focus({ preventScroll: true });
+  }
+  _closeMenu() { this._menu?.remove(); this._menu = null; }
+
+  // --- after a throw: a few seconds to take it back ------------------------------------
+  _offerUnsend() {
+    this._unsendEl?.remove();
+    const t = document.createElement('div'); t.className = 'unsend';
+    t.innerHTML = `<span>Sent to ${esc(this.recipient.name)}</span><button type="button">Unsend</button>`;
+    t.addEventListener('pointerdown', e => e.stopPropagation());
+    t.querySelector('button').addEventListener('click', e => {
+      e.stopPropagation();
+      if (this.seq.unsend()) { this._shaped = true; this.audio?.rustle(); this._tick(); }
+      t.remove(); this._unsendEl = null;
+    });
+    this.row.parentNode.appendChild(t); this._unsendEl = t;
+    clearTimeout(this._unsendT);
+    this._unsendT = setTimeout(() => { t.classList.add('out'); setTimeout(() => { t.remove(); if (this._unsendEl === t) this._unsendEl = null; }, 300); }, 3000);
+  }
+
   /** Wind streaks sweeping across the screen (dir −1 to the left, +1 to the right). */
   _windGust(dir) {
+    if (REDUCED) return;
     const w = document.createElement('div');
     w.className = 'gust' + (dir < 0 ? ' left' : '');
     for (let i = 0; i < 9; i++) {
@@ -684,7 +806,7 @@ export class Letter {
     this.photo?.el.remove(); this.photo = null;
     this.voice = null; this.voiceEl.hidden = true;
     this._toggleTray(false);
-    if (this.pen) this.el.querySelector('[data-tool=pen]').click();
+    if (this.pen) this._setPen(false);
   }
 
   /** Call when the sequence changes mode. */
@@ -705,9 +827,11 @@ export class Letter {
       this._applyLook(true);
       this._writeDear(); this._writeSign(); this._typePrompts();
       requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); this._centreActions(); });
+      setTimeout(() => { if (this.seq.mode === 'card') this._coach(); }, 1600);   // the very first letter: show the gestures
       this.circles.open();
     }
-    if (mode === 'fold') { this.text.blur(); this._toggleTray(false); this.seq.paint(this._composition()); }   // everything on the letter goes onto the paper as it folds
+    if (mode === 'fold') { this.text.blur(); this._toggleTray(false); this.seq.paint(this._composition()); this._shaped = true; }
+    if (mode === 'plane' || mode === 'bottle') { this._closeMenu(); this._coachOff(); this._offerUnsend(); }   // thrown: a moment to take it back   // everything on the letter goes onto the paper as it folds
     if (!writing && this.el && !this.el.hidden) { this.el.hidden = true; this.text.blur(); }
     if (!rowOn && this.visible) {
       this.visible = false;
