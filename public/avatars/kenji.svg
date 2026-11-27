@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><!-- demo portrait (illustration, not a real person) -->
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe0a8"/><stop offset="1" stop-color="#f4b860"/></linearGradient></defs>
+<rect width="120" height="120" fill="url(#bg)"/>
+<path d="M16 120c4-26 22-38 44-38s40 12 44 38z" fill="#3d5a80"/>
+<path d="M50 82h20l-10 14z" fill="#e8eef6"/>
+<ellipse cx="60" cy="58" rx="19" ry="22" fill="#e9b98f"/>
+<path d="M40 54c0-16 9-26 21-26 13 0 21 9 21 24-6-6-14-10-22-10-8 0-15 5-20 12z" fill="#1f1f2b"/>
+<rect x="47" y="56" width="11" height="8" rx="3" fill="none" stroke="#2a2a33" stroke-width="2"/>
+<rect x="62" y="56" width="11" height="8" rx="3" fill="none" stroke="#2a2a33" stroke-width="2"/>
+<path d="M58 59h4" stroke="#2a2a33" stroke-width="2"/>
+<path d="M54 71c3 2 9 2 12 0" stroke="#9c5b45" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+</svg>

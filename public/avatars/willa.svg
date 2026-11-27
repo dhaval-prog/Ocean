@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><!-- demo portrait (illustration, not a real person) -->
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe3d0"/><stop offset="1" stop-color="#7cc2a8"/></linearGradient></defs>
+<rect width="120" height="120" fill="url(#bg)"/>
+<path d="M18 120c4-26 22-38 42-38s38 12 42 38z" fill="#f2b880"/>
+<path d="M18 120c4-26 22-38 42-38s38 12 42 38z" fill="#e07a5f" opacity=".85"/>
+<path d="M34 58c0-22 12-34 26-34s28 12 28 34c0 14-4 30-10 34H42c-6-4-8-20-8-34z" fill="#6b3f2a"/>
+<ellipse cx="60" cy="58" rx="18" ry="21" fill="#f4c7a1"/>
+<path d="M41 52c4-14 12-20 22-20 9 0 16 6 18 16-10-2-24-8-28-12-2 6-6 12-12 16z" fill="#6b3f2a"/>
+<circle cx="53" cy="60" r="2.2" fill="#3a2a22"/><circle cx="67" cy="60" r="2.2" fill="#3a2a22"/>
+<path d="M54 69c3 3 9 3 12 0" stroke="#b4574a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+<circle cx="48" cy="66" r="3.5" fill="#f0a08a" opacity=".55"/><circle cx="72" cy="66" r="3.5" fill="#f0a08a" opacity=".55"/>
+</svg>

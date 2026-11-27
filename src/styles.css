@@ -199,27 +199,81 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   background: linear-gradient(to bottom, var(--card) 0%, transparent 100%);
 }
 .people[hidden] { display: none; }
+/* the row fades softly toward both screen edges */
+.people { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); }
 .people-track { display: flex; gap: 28px; align-items: flex-start; width: max-content; transition: transform 0.45s cubic-bezier(.2, .9, .25, 1.1); }
 .person {
   display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 0; border: 0; background: none;
-  font: inherit; color: var(--ink); opacity: 0.38; transition: opacity 0.3s, transform 0.3s; cursor: pointer;
+  font: inherit; color: var(--ink); opacity: 0.38; transition: opacity 0.35s, transform 0.35s cubic-bezier(.2, .9, .3, 1.2); cursor: pointer;
 }
 .person.selected { opacity: 1; }
 .person.extra { cursor: default; }
+/* --- porthole avatars: brass rim with rivets, glass glare, photo or initials inside --- */
+.person .port { position: relative; display: grid; place-items: center; margin: 7px 0 3px; }
 .person .face {
-  position: relative; width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+  position: relative; width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
   background: var(--c, #ccc); color: #fff; font: 700 26px/1 system-ui, sans-serif; letter-spacing: 0.02em;
-  border: 3px solid var(--r, transparent); box-sizing: border-box; transition: width 0.3s, height 0.3s, font-size 0.3s;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.35), inset 0 -2px 5px rgba(255, 255, 255, 0.18);   /* set back into the hull */
+  transition: width 0.3s, height 0.3s, font-size 0.3s;
 }
+.person .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.person .face .initials { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+/* brass rim with four rivets */
+.person .port::before {
+  content: ''; position: absolute; inset: -7px; border-radius: 50%; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 3.5px, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
+    radial-gradient(circle at 50% calc(100% - 3.5px), #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
+    radial-gradient(circle at 3.5px 50%, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
+    radial-gradient(circle at calc(100% - 3.5px) 50%, #fff2c4 0 1.6px, #7a561c 2.2px, transparent 2.8px),
+    conic-gradient(from 200deg, #f0d48a, #a57628, #f6e2a4, #8b6220, #dcb462, #b98a3a, #f0d48a);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px));
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+/* glass: a glare sweeping across the top */
+.person .port::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 2; pointer-events: none;
+  background:
+    radial-gradient(ellipse 34% 15% at 34% 20%, rgba(255, 255, 255, 0.75), transparent 70%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 32%, transparent 48%, transparent 80%, rgba(255, 255, 255, 0.12) 100%);
+}
+/* unread letters: a rainbow ring outside the rim that slowly turns, fading once read */
+.person .ring {
+  position: absolute; inset: -12px; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: conic-gradient(#ff7a59, #ffc94a, #5ed39b, #4aa8ff, #b27bff, #ff7a59);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  animation: ring-turn 4s linear infinite; transition: opacity 1.2s ease;
+}
+.person .ring.read { opacity: 0; }
+@keyframes ring-turn { to { transform: rotate(1turn); } }
+/* on the ocean right now: a little boat bobbing on the avatar */
+.person .online {
+  position: absolute; right: -9px; bottom: -6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; background: #fff; color: #2f6fb5; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+  animation: boat-bob 2.4s ease-in-out infinite;
+}
+.person .online svg { width: 70%; height: 70%; }
+@keyframes boat-bob { 50% { transform: translateY(-2px) rotate(-6deg); } }
+/* picking someone: squash & stretch */
+.person .port.pop { animation: port-pop 0.55s cubic-bezier(.3, .7, .4, 1); }
+@keyframes port-pop {
+  0% { transform: scale(1); } 22% { transform: scale(1.17, 0.85); } 45% { transform: scale(0.92, 1.09); }
+  68% { transform: scale(1.04, 0.97); } 100% { transform: scale(1); }
+}
+.haptic { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .person .ring, .person .online, .person .port.pop { animation: none; } }
 .person.selected .face { width: 96px; height: 96px; font-size: 32px; }
 .person .face.bell { background: #8e8a76; color: #fff; }
 .person .face.status { background: #5d5847; color: #fff; }
 .person .face svg { width: 38%; height: 38%; }
-.person .face .plus {
+.person .port .badge, .person .port .plus { z-index: 3; }
+.person .face .plus, .person .port .plus {
   position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
   background: #6cc06c; color: #fff; font: 700 18px/1 system-ui, sans-serif; border: 2px solid #fff;
 }
-.people .badge { background: #7d9be0; top: -4%; right: -4%; }
+.people .badge { background: #7d9be0; top: -8%; right: -8%; }
 .people .badge.warm { background: #e48a73; top: auto; bottom: 2%; right: -6%; }
 .person .name { font-weight: 700; font-size: 14px; white-space: nowrap; }
 .person.selected .name { font-size: 18px; }
