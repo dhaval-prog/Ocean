@@ -6,7 +6,8 @@ import * as THREE from 'three';
 // additive and bright enough to bloom. The bolt keeps its channel for every
 // return stroke of a strike and simply follows the flash brightness.
 
-const MAX_PTS = 900;   // ribbon vertices budget (2 per point, 2 layers)
+const MAX_PTS = 900;
+const WHITE = new THREE.Color(1, 1, 1);   // ribbon vertices budget (2 per point, 2 layers)
 
 const VERT = /* glsl */ `
 attribute float aEdge; attribute float aFade;
@@ -84,10 +85,11 @@ export class Lightning {
     this.hit = hit;
   }
 
-  /** Bolt colour for the time of day: violet-white at dusk, blue-white at night, warmer at sunset. */
+  /** Bolt colour for the time of day (dark blue at dawn, dark red at sunset, warm yellow at dusk …):
+   *  a hot, bright core tinted by it inside a glow of the full colour. */
   setColor(c) {
-    this.core.material.uniforms.uColor.value.copy(c).multiplyScalar(3.3);
-    this.glow.material.uniforms.uColor.value.copy(c).lerp(new THREE.Color(0.45, 0.55, 1.0), 0.45).multiplyScalar(1.6);
+    this.core.material.uniforms.uColor.value.copy(c).lerp(WHITE, 0.3).multiplyScalar(3.0);
+    this.glow.material.uniforms.uColor.value.copy(c).multiplyScalar(2.4);
   }
 
   /** Every frame: rebuild the camera-facing ribbons; intensity follows the flash (0 … 1). */
