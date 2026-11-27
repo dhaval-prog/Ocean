@@ -527,8 +527,9 @@ const calm = now => fingers === 0 && now - touchedAt > 600 && !controls.dragging
   && (seq.mode === 'idle' || seq.mode === 'card' || (seq.mode === 'shaping' && seq._shapeTarget == null));
 let lastFrameAt = 0;
 // battery saver, writing or reading the letter: the scene is drawn once and then holds still as a
-// picture (no 3D rendering at all); only the friends row keeps moving, at ~10 fps. It comes back to
-// life as soon as a finger touches the screen or anything changes, and refreshes once a minute.
+// picture (no 3D rendering at all); only the friends row keeps moving, at ~10 fps. Nothing done on the
+// letter wakes it; it comes back to life when the letter is folded, rolled, sent or closed. (A single
+// frame is redrawn only if the paper itself changes or the screen size changes, e.g. the keyboard.)
 const paintPaper = seq.paint.bind(seq);
 seq.paint = (...a) => { needFrame = true; return paintPaper(...a); };   // the paper changed: draw it
 
@@ -540,15 +541,17 @@ const ringTmp = new THREE.Color();
 const lookWx = { glints: 0, petals: 0, specks: 0 }, windVec = [0, 0], bowPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const nowMs = performance.now(), isCalm = calm(nowMs);
-  const still = !hqGraphics && isCalm && seq.mode === 'card' && letter.visible;
+  // battery saver, letter open and flat: the sea stays frozen whatever you do on the letter (typing,
+  // tapping, stickers, drawing, voice, choosing a friend); only folding / rolling / sending wakes it
+  const still = !hqGraphics && seq.mode === 'card' && letter.visible;
   calmSince = still ? (calmSince || nowMs) : 0;
   if (still && nowMs - calmSince > 500) {
-    if (!needFrame && nowMs - stillFrameAt < 60000) {
+    if (!needFrame) {
       if (nowMs - ringsAt >= 100) { letter.update(Math.min(0.25, (nowMs - (ringsAt || nowMs)) / 1000)); ringsAt = nowMs; }
       timer.update();                                    // time keeps moving, so nothing jumps when it wakes up
       return;
     }
-    needFrame = false; stillFrameAt = nowMs;            // one fresh frame, then still again
+    needFrame = false; stillFrameAt = nowMs;            // the paper or the screen size changed: one frame, then still again
   } else if (!hqGraphics && isCalm && nowMs - lastFrameAt < 1000 / 30 - 3) return;   // battery saver: 30 fps while calm
   lastFrameAt = nowMs;
   lastFrameAt = nowMs;
