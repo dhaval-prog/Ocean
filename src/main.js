@@ -96,7 +96,7 @@ const ambience = new Ambience();
 const root = document.documentElement;
 const glintColor = new THREE.Color();
 const stormGrey = new THREE.Color('#7d8a8c'), cloudGrey = new THREE.Color('#aab4ba'), fogWhite = new THREE.Color('#dde4e8');
-const skyNow = new THREE.Color(), skyTopNow = new THREE.Color(), fogNow = new THREE.Color();
+const skyNow = new THREE.Color(), skyTopNow = new THREE.Color(), fogNow = new THREE.Color(), seaNow = new THREE.Color();
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 const cssCache = {};
 const setCss = (k, v) => { if (cssCache[k] !== v) { cssCache[k] = v; k.startsWith('--') ? root.style.setProperty(k, v) : (root.dataset.dark = v); } };
@@ -116,7 +116,11 @@ function applyLook() {
   const dim = 1 - W.clouds * 0.22 - W.rain * 0.08;
   for (const l of lights) l.intensity = l.userData.base * (ocean.light * dim + weather.flash * 0.4);
   const theme = '#' + ocean.uniforms.uPalB.value[1].getHexString();
-  if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); root.style.setProperty('--sea', theme); }
+  if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); }
+  // the page background (shown only in any strip the sea doesn't reach) follows the sea's
+  // current look: the near-water colour, greyed by storms / clouds / fog like the sky
+  seaNow.copy(ocean.uniforms.uPalB.value[1]).lerp(ocean.uniforms.uPalB.value[2], 0.4).lerp(stormGrey, g * 1.2).lerp(cloudGrey, W.clouds * 0.4).lerp(fogNow, W.fog * 0.6);
+  setCss('--sea', '#' + seaNow.getHexString());
 }
 
 // --- UI -----------------------------------------------------------------------
