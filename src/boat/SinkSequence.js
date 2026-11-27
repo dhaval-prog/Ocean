@@ -14,7 +14,13 @@ const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 // tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
 // the folded plane, seen from above: nose up the screen, tipped a little away from you
-const PLANE_TILT = 0.38, PLANE_SCALE = 0.6, DIHEDRAL = 0.24;
+const PLANE_TILT = Math.PI / 3, PLANE_SCALE = 0.72, DIHEDRAL = 0.24;   // nose 60° away from you: you see its back, the T of wings and keel
+/** How far the plane has tipped away (radians) at fold progress k: the paper faces you for the first folds, then the nose dips away. */
+const planeTilt = k => 0.12 * k + (PLANE_TILT - 0.12) * smoothstep(0.62, 1, k);
+/** The plane's turn at fold progress k (and a bank about its nose): it dips its nose away and turns over
+ *  so its top faces you and the keel hangs below the wings (the T you see from behind). */
+const planeQ = (k, bank = 0) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -planeTilt(k))
+  .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * smoothstep(0.62, 1, k) + bank));
 const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -150,12 +156,18 @@ export class SinkSequence {
   /** Start shaping from the flat letter (card). */
   beginShape() {
     if (this.mode !== 'card') return false;
-    this.shapeS = 0; this._shapeTarget = null;
+    this.shapeS = 0; this._shapeTarget = null; this.steer = 0; this._bank = 0; this._gust = null;
     this.setMode('shaping');
     return true;
   }
 
   setShapeS(v) { this.shapeS = Math.max(-1, Math.min(1, v)); this._shapeTarget = null; }
+
+  /** Steer the folded plane with the finger (−1 left … +1 right): it banks its wings that way. */
+  setSteer(v) { this.steer = Math.max(-1, Math.min(1, v)); }
+
+  /** A strong gust shoves the plane sideways (dir −1 left, +1 right). */
+  gust(dir) { this._gust = { dir, t0: this._now }; }
 
   /** Glide to −1, 0 or +1; back at 0 it is the flat letter again. */
   snapShape(target) { this._shapeTarget = target; }
@@ -260,10 +272,11 @@ export class SinkSequence {
     const c = this.geo.attributes.color;
     if (!on) { if (this._shaded) { c.array.fill(1); c.needsUpdate = true; this._shaded = false; } return; }
     this.geo.computeVertexNormals();
-    const nr = this.geo.attributes.normal, lx = 0.71, ly = 0.2, lz = 0.68;
+    const nr = this.geo.attributes.normal, lx = 0.25, ly = 0.18, lz = 0.95;   // mostly from the front: the keel and side panels read darker
     for (let i = 0; i < c.count; i++) {
-      const v = Math.min(1, 0.3 + 1.03 * Math.abs(nr.getX(i) * lx + nr.getY(i) * ly + nr.getZ(i) * lz));
-      c.setXYZ(i, v, v, v * 1.01);
+      const v = Math.min(1, 0.36 + 0.68 * Math.abs(nr.getX(i) * lx + nr.getY(i) * ly + nr.getZ(i) * lz));
+      const ln = this._crease?.[i] ? 0.74 : 1;                                          // a faint line along every fold
+      c.setXYZ(i, v * ln, v * ln, v * ln * 1.01);
     }
     c.needsUpdate = true; this._shaded = true;
   }
@@ -283,7 +296,7 @@ export class SinkSequence {
    * (instead of following the grid in steps). The wings spread a little and end slightly raised.
    */
   _foldPlane(k) {
-    const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.13;
+    const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.27;
     const snap = 0.75 * Math.hypot(PW / 72, PH / 90);                    // ≥ half the longest triangle edge
     const st = i => Math.min(1, Math.max(0, k * 8 - i));                 // progress of fold i (0-based)
     const e = i => { const x = st(i); return x * x * (3 - 2 * x); };
@@ -294,18 +307,20 @@ export class SinkSequence {
       [0, hh, -r2, -r2, -1], [0, hh, r2, -r2, 1],                         // 2, 3: top corners to the centre
       [0, hh, -s22, -c22, -1], [0, hh, s22, -c22, 1],                     // 4, 5: slanted edges to the centre
     ];
+    const cz = this._crease || (this._crease = new Uint8Array(a.count)); cz.fill(0);   // vertices on a fold line or a flap edge
     for (let n = 0; n < a.count; n++) {
       let qx = b[n * 3], qy = b[n * 3 + 1], qz = 0, out = null;
+      if (k > 0 && (Math.abs(Math.abs(qx) - hw) < 1e-4 || Math.abs(qy - hh) < 1e-4)) cz[n] = 1;   // the paper's edges: a flap's edge shows as a line
       // 1: fold the right half over to the left and open it again
       const p1 = st(0);
-      if (p1 > 0 && Math.abs(qx) < snap) qx = 0;                         // onto the centre crease
+      if (p1 > 0 && Math.abs(qx) < snap) { qx = 0; cz[n] = 1; }          // onto the centre crease
       if (p1 > 0 && p1 < 1 && qx > 0) { const th = Math.PI * 0.94 * Math.sin(Math.PI * p1); out = [qx * Math.cos(th), qy, qx * Math.sin(th)]; }
       // 2-5: flat folds, each flap swinging over toward you onto the paper
       for (let i = 1; i <= 4 && !out; i++) {
         const p = st(i); if (p <= 0) break;
         const [ax, ay, dx, dy, sgn] = flats[i];
         let vx = qx - ax, vy = qy - ay, cr = dx * vy - dy * vx;
-        if (Math.abs(cr) < snap) { qx -= -dy * cr; qy -= dx * cr; continue; }   // onto the crease: a straight fold edge
+        if (Math.abs(cr) < snap) { qx -= -dy * cr; qy -= dx * cr; cz[n] = 1; continue; }   // onto the crease: a straight fold edge
         if (cr * sgn <= 0) continue;                                      // not on the moving side
         const pr = vx * dx + vy * dy, px = vx - pr * dx, py = vy - pr * dy, pl = Math.hypot(px, py) || 1e-6;
         if (p < 1) {                                                      // part-way: lifting about the crease
@@ -316,8 +331,8 @@ export class SinkSequence {
       // 6-8: fold in half (halves swing back), then each wing down
       if (!out && st(5) > 0) {
         if (Math.abs(qx) < snap) qx = 0;                                  // onto the centre (keel) crease
-        const phi = e(5) * Math.PI / 2, side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);
-        let u = Math.abs(qx); if (Math.abs(u - d) < snap && psi > 0) u = d;  // onto the wing crease
+        const phi = e(5) * (Math.PI / 2 - 0.2), side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);   // the keel halves stay a little open: a narrow V
+        let u = Math.abs(qx); if (Math.abs(u - d) < snap && psi > 0) { u = d; cz[n] = 1; }  // onto the wing crease
         let X, Z;
         if (u <= d || psi === 0) { X = side * u * Math.cos(phi); Z = -u * Math.sin(phi); }
         else {
@@ -479,7 +494,18 @@ export class SinkSequence {
       const sv = this.shapeS, tg = this._cardTarget(), sw = Math.sin(t * 1.1) * (1 - Math.abs(sv) * 0.6);
       const up = new V3(0, 1, 0).applyQuaternion(tg.q);
       P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0));
-      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 - (sv > 0 ? PLANE_TILT * sv : 0), Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));   // a plane tilts back, top away from you
+      // steering: the wings bank toward the finger; a gust shoves it sideways, yawing and fluttering
+      this._bank = (this._bank || 0) + ((this.steer || 0) * (sv >= 0.99 ? 1 : 0) - (this._bank || 0)) * Math.min(1, dt * 8);
+      let gx = 0, gYaw = 0, gRoll = 0, gFl = 0;
+      if (this._gust) {
+        const tau = (this._now - this._gust.t0) / 1000, p = Math.min(1, tau / 0.9), env = Math.sin(Math.PI * Math.pow(p, 0.5));
+        gx = this._gust.dir * 0.42 * env; gYaw = -this._gust.dir * 0.35 * env; gRoll = this._gust.dir * 0.35 * env;
+        gFl = Math.sin(tau * 38) * 0.06 * env;
+        if (p >= 1) this._gust = null;
+      }
+      P.position.addScaledVector(new V3(1, 0, 0).applyQuaternion(tg.q), gx);
+      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 + gFl, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv + gYaw : 0)));   // a plane dips its nose away from you
+      if (sv > 0) P.quaternion.multiply(planeQ(sv, -(0.55 * this._bank + gRoll)));   // nose away, turned over, banking about its nose
       const Bt = this.bottle;
       P.scale.setScalar(1 - (1 - PLANE_SCALE) * Math.max(0, sv));                       // the folded plane sits comfortably on screen
       if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
@@ -495,7 +521,7 @@ export class SinkSequence {
       this._shape(this.sendKind, k);
       P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : 0) * k);
       P.quaternion.copy(this._fromQ);
-      if (this.sendKind === 'plane') { P.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), -PLANE_TILT * k)); P.scale.setScalar(1 - (1 - PLANE_SCALE) * k); }   // tilts back as it folds
+      if (this.sendKind === 'plane') { P.quaternion.multiply(planeQ(k)); P.scale.setScalar(1 - (1 - PLANE_SCALE) * k); }   // tilts back as it folds
       if (t >= DUR.fold) {
         this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
         if (this.sendKind === 'bottle') { this.bottle.visible = true; this._placeBottle(0.01); this._glass().opacity = 0.38; }
@@ -517,8 +543,10 @@ export class SinkSequence {
       const toCam = new V3().subVectors(this.camera.position, pos).normalize();          // its top faces you, wings spread
       const right = new V3().crossVectors(fwd, toCam).normalize(), top = new V3().crossVectors(right, fwd);
       P.position.copy(pos);
-      P.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, fwd, top))
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(0, 1, 0), Math.sin(k * Math.PI * 2) * 0.45));   // banks as it swoops
+      const qF = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, fwd, top))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), -PLANE_TILT * 0.8))            // nose still dipped away from you
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(0, 1, 0), Math.PI + Math.sin(k * Math.PI * 2) * 0.45));   // top up, banking as it swoops
+      P.quaternion.slerpQuaternions(this._fromQ, qF, smoothstep(0, 0.3, k));                              // turns smoothly from how you held it
       P.scale.setScalar(this._s0 * (1 - 0.72 * e));
       if (k >= 1) { this._planeEnd = null; this.onSent?.('plane'); this._arrive(); }
     } else if (this.mode === 'bottle') {

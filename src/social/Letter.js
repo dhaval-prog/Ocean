@@ -57,11 +57,6 @@ export class Letter {
     this.el.innerHTML = `
       <canvas class="doodle" aria-hidden="true"></canvas>
       <div class="deco"></div>
-      <div class="tools">
-        <button type="button" data-tool="clear" class="tool" aria-label="Clear doodles" hidden>${ICONS.eraser}</button>
-        <button type="button" data-tool="pen" class="tool" aria-label="Doodle with the pen" aria-pressed="false">${ICONS.pen}</button>
-        <button type="button" data-tool="decor" class="tool" aria-label="Paper, mood and stickers" aria-expanded="false">${ICONS.sparkle}</button>
-      </div>
       <div class="tray" hidden>
         <div class="tray-tabs" role="tablist">
           <button type="button" data-tab="paper" class="on">Paper</button><button type="button" data-tab="mood">Mood</button><button type="button" data-tab="stickers">Stickers</button>
@@ -79,10 +74,15 @@ export class Letter {
       <div class="sign" aria-hidden="true"></div>
       <div class="sparks" aria-hidden="true"></div>
       <div class="letter-actions">
-        <button type="button" data-act="camera" aria-label="Add a photo">${ICONS.camera}</button>
-        <button type="button" data-act="mic" class="primary" aria-label="Record a voice note">${ICONS.mic}</button>
-        <button type="button" data-act="bell" aria-label="Remind me">${ICONS.bell}</button>
-        <button type="button" data-act="inbox" aria-label="Letters in your inbox">${ICONS.inbox}<span class="badge">${INBOX}</span></button>
+        <div class="acts-track">
+          <button type="button" data-tool="clear" class="tool" aria-label="Clear doodles" hidden>${ICONS.eraser}</button>
+          <button type="button" data-tool="pen" class="tool" aria-label="Doodle with the pen" aria-pressed="false">${ICONS.pen}</button>
+          <button type="button" data-act="camera" aria-label="Add a photo">${ICONS.camera}</button>
+          <button type="button" data-act="mic" class="primary" aria-label="Record a voice note">${ICONS.mic}</button>
+          <button type="button" data-act="bell" aria-label="Remind me">${ICONS.bell}</button>
+          <button type="button" data-act="inbox" aria-label="Letters in your inbox">${ICONS.inbox}<span class="badge">${INBOX}</span></button>
+          <button type="button" data-tool="decor" class="tool" aria-label="Paper, mood and stickers" aria-expanded="false">${ICONS.sparkle}</button>
+        </div>
       </div>
       <input type="file" accept="image/*" hidden>`;
     root.appendChild(this.el);
@@ -357,9 +357,15 @@ export class Letter {
     this.sign = text;
   }
 
+  /** The bottom carousel starts with the mic button in the middle. */
+  _centreActions() {
+    const a = this.el.querySelector('.letter-actions'), m = a.querySelector('[data-act=mic]');
+    a.scrollLeft = m.offsetLeft + m.offsetWidth / 2 - a.clientWidth / 2;
+  }
+
   // --- tools: pen, decorate tray, photo, voice -------------------------------------
   _bindTools() {
-    const tools = this.el.querySelector('.tools');
+    const tools = this.el.querySelector('.letter-actions');
     tools.addEventListener('pointerdown', e => e.stopPropagation());
     tools.addEventListener('click', e => {
       const b = e.target.closest('[data-tool]'); if (!b) return;
@@ -495,7 +501,7 @@ export class Letter {
     const box = () => this.el.getBoundingClientRect();
     const toUV = e => { const b = box(); return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height]; };
     this.el.addEventListener('pointerdown', e => {
-      if (e.target.closest('button, .tray, .tools')) return;
+      if (e.target.closest('button, .tray, .letter-actions')) return;
       const item = e.target.closest('.stk, .polaroid');
       if (item) {                                                           // move a sticker / the photo
         const s = item === this.photo?.el ? this.photo : this.stickers.find(k => k.el === item);
@@ -571,7 +577,7 @@ export class Letter {
       g.trail.push({ y: ev.clientY, t: performance.now() }); if (g.trail.length > 10) g.trail.shift();
       if (!g.axis) {
         if (Math.hypot(dx, dy) < 10) return;
-        g.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';
+        g.axis = g.s0 >= 0.97 ? 'y' : Math.abs(dx) > Math.abs(dy) * 1.15 ? 'x' : 'y';   // a finished plane: held, it can be steered too
         if (g.axis === 'y') {
           this.text.blur(); this._toggleTray(false);
           g.side = g.s0 > 0 ? 'plane' : g.s0 < 0 ? 'bottle' : dy > 0 ? 'plane' : 'bottle';
@@ -582,6 +588,19 @@ export class Letter {
       if (g.axis !== 'y') return;
       let v = g.s0 + dy / R();
       v = g.side === 'plane' ? Math.max(0, Math.min(1, v)) : Math.max(-1, Math.min(0, v));
+      if (g.xa != null && ev.clientY - g.ya < 70) v = 1;                  // steering: a sideways finger doesn't unfold it
+      // the folded plane, held: turn the finger left / right to bank toward the friend on that side
+      if (g.side === 'plane' && v >= 0.99) {
+        if (g.xa == null) { g.xa = ev.clientX; g.ya = ev.clientY; }
+        const sx = ev.clientX - g.xa;
+        this.seq.setSteer(sx / 90);
+        if (Math.abs(sx) > 80) {
+          const dir = sx > 0 ? 1 : -1, before = this.index;
+          this.select(this.index + dir);
+          if (this.index !== before) { this.seq.gust(dir); this._windGust(dir); this.seq.paint(this._composition()); this.audio?.rustle(); }
+          g.xa = ev.clientX;
+        }
+      } else if (g.xa != null) { g.xa = null; this.seq.setSteer(0); }
       this.seq.setShapeS(v);
       const step = Math.floor(Math.abs(v) * 4 + 0.001);                  // a fold step: a tick and a paper sound
       if (step !== g.step) { g.step = step; this._tick(); this.audio?.[step % 2 ? 'rustle' : 'scratch'](); }
@@ -590,7 +609,7 @@ export class Letter {
     const up = ev => {
       if (ev.pointerId !== g.id) return;
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
-      this._shapeG = null;
+      this._shapeG = null; this.seq.setSteer?.(0);
       const dx = ev.clientX - g.x0, now = performance.now();
       if (!g.axis) {                                                      // a tap: write (on the flat letter)
         if (g.onPaper && this.seq.mode === 'card') { this.text.focus(); const n = this.text.value.length; this.text.setSelectionRange(n, n); }
@@ -616,6 +635,22 @@ export class Letter {
       setTimeout(() => this._syncHint(), 350);
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+
+  /** Wind streaks sweeping across the screen (dir −1 to the left, +1 to the right). */
+  _windGust(dir) {
+    const w = document.createElement('div');
+    w.className = 'gust' + (dir < 0 ? ' left' : '');
+    for (let i = 0; i < 9; i++) {
+      const s = document.createElement('i');
+      s.style.top = (38 + Math.random() * 40).toFixed(1) + '%';
+      s.style.width = (18 + Math.random() * 30).toFixed(0) + '%';
+      s.style.animationDelay = (Math.random() * 0.22).toFixed(2) + 's';
+      s.style.opacity = (0.35 + Math.random() * 0.5).toFixed(2);
+      w.appendChild(s);
+    }
+    this.row.parentNode.appendChild(w);
+    setTimeout(() => w.remove(), 1300);
   }
 
   _redrawDoodles() {
@@ -677,7 +712,7 @@ export class Letter {
       document.body.classList.add('writing');
       this._applyLook(true);
       this._writeDear(); this._writeSign(); this._typePrompts();
-      requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); });
+      requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); this._centreActions(); });
       this.circles.open();
     }
     if (mode === 'fold') { this.text.blur(); this._toggleTray(false); this.seq.paint(this._composition()); }   // everything on the letter goes onto the paper as it folds

@@ -198,14 +198,6 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 }
 .letter .sign { align-self: flex-end; min-height: calc(var(--u) * 8); margin: calc(var(--u) * 1) calc(var(--u) * 2) calc(var(--u) * 2) 0;
   font: 600 calc(var(--u) * 6.4)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent); }
-/* tools in the top-right corner of the paper: clear, pen, decorate */
-.letter .tools { position: absolute; z-index: 6; top: calc(var(--u) * 3); right: calc(var(--u) * 3); display: flex; gap: calc(var(--u) * 1.8); }
-.letter .tool {
-  width: max(30px, calc(var(--u) * 9)); height: max(30px, calc(var(--u) * 9)); border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
-  background: rgba(255, 255, 255, 0.75); color: #3a3350; box-shadow: 0 2px 6px rgba(40, 60, 120, 0.18);
-}
-.letter .tool svg { width: 55%; height: 55%; }
-.letter .tool.on { background: var(--ink, #3d4aa3); color: #fff; }
 .letter.pen-on { cursor: crosshair; }
 /* the decorate tray: paper styles, moods, stickers */
 .letter .tray {
@@ -259,13 +251,24 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .letter .sparks .drop-splash { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; border: 2px solid var(--ink, #3d4aa3); animation: drop-splash 0.85s ease-out forwards; }
 @keyframes drop-splash { to { transform: scale(9); opacity: 0; border-width: 0.5px; } }
 .letter-toast { position: absolute; z-index: 8; left: 50%; bottom: calc(var(--u) * 24); transform: translateX(-50%); padding: 6px 10px; border-radius: 8px; background: rgba(30, 30, 50, 0.85); color: #fff; font: 600 12px/1.2 system-ui, sans-serif; white-space: nowrap; }
-.letter-actions { display: flex; gap: calc(var(--u) * 4); justify-content: center; }
+.letter-actions {
+  position: relative; width: calc(100% + var(--u) * 16); margin: 0 calc(var(--u) * -8); overflow-x: auto; overflow-y: visible; touch-action: pan-x;
+  scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior: contain;
+  padding: calc(var(--u) * 2) 0 calc(var(--u) * 4);
+  /* a carousel like the friends row: the buttons fade out toward both sides */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%, #000 78%, transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 22%, #000 78%, transparent 100%);
+}
+.letter-actions::-webkit-scrollbar { display: none; }
+.acts-track { display: flex; gap: calc(var(--u) * 4); width: max-content; padding: 0 calc(50% - var(--u) * 8); }
+.acts-track > button { scroll-snap-align: center; flex: none; }
+.acts-track > button[hidden] { display: none; }
 .letter-actions button {
   position: relative; width: calc(var(--u) * 16); height: calc(var(--u) * 16); min-width: 40px; min-height: 40px;
   border: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
   background: #e3e8f6; color: #2a2433; box-shadow: 0 calc(var(--u) * 1.4) calc(var(--u) * 3.5) rgba(40, 60, 120, 0.16);
 }
 .letter-actions button.primary { background: #cdd9f7; }
+.letter-actions button.tool.on { background: var(--ink, #3d4aa3); color: #fff; }
 .letter-actions button svg { width: 42%; height: 42%; }
 .letter-actions .badge, .people .badge {
   position: absolute; top: -6%; right: -6%; min-width: 1.7em; height: 1.7em; padding: 0 0.4em; box-sizing: border-box;
@@ -473,3 +476,12 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 
 /* while writing, the ocean UI steps back */
 body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+
+/* a strong gust when the held plane is steered to another friend */
+.gust { position: absolute; inset: 0; z-index: 13; pointer-events: none; overflow: hidden; }
+.gust i { position: absolute; left: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.95) 60%, transparent);
+  animation: gust-r 0.75s cubic-bezier(.3, .1, .3, 1) both; }
+.gust.left i { animation-name: gust-l; }
+@keyframes gust-r { from { transform: translateX(-110%); } to { transform: translateX(110vw); } }
+@keyframes gust-l { from { transform: translateX(110vw); } to { transform: translateX(-110%); } }
