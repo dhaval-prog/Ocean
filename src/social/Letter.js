@@ -1,4 +1,5 @@
 import { ME, FRIENDS, NOTIFICATIONS, INBOX } from './people.js';
+import { WaterRings } from './WaterRing.js';
 
 // The letter you write on the paper that pops out of the sea, plus the row of
 // people at the top of the screen (you in the middle, friends in the ocean to
@@ -99,6 +100,7 @@ export class Letter {
     this.track = this.row.querySelector('.people-track');
     this.people = [...this.row.querySelectorAll('.person[data-i]')];
     this.allPeople = [...this.row.querySelectorAll('.person')];      // incl. Notifications / Add Status
+    this.water = new WaterRings([...this.row.querySelectorAll('.port')]);   // live water round every avatar
     this._readTimer = null;
     this.people.forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - this._swipedAt > 350) this.select(+b.dataset.i); }));
     this._swipedAt = 0;
@@ -194,6 +196,7 @@ export class Letter {
   /** Every frame: keep the overlay glued to the paper. */
   update() {
     if (!this.visible) return;
+    this.water.draw();
     const r = this.seq.screenRect(), s = this.el.style;
     s.left = r.x + 'px'; s.top = r.y + 'px'; s.width = r.w + 'px'; s.height = r.h + 'px';
     s.setProperty('--u', (r.w / 100) + 'px');              // 1% of the paper width
