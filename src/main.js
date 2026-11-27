@@ -32,7 +32,10 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, power
 // almost nothing visible above 2x, but would cost over twice the pixels).
 // Graphics setting: 'high' (default) or 'saver' (battery saver: lower 3D resolution, no MSAA,
 // 30 fps while nothing moves fast). The letter, buttons and circles are HTML, so they stay sharp.
-let hqGraphics = (() => { try { return localStorage.getItem('ocean.graphics') !== 'saver'; } catch { return true; } })();
+// Phones start in battery saver (cooler, smoother); tablets and computers start in high quality.
+// Once someone flips the switch, their choice is kept.
+const isPhone = isTouch && Math.min(screen.width, screen.height) < 600;
+let hqGraphics = (() => { try { const g = localStorage.getItem('ocean.graphics'); return g ? g !== 'saver' : !isPhone; } catch { return !isPhone; } })();
 const SAVER_DPR = 1.25;
 const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
 let pixelRatio = hqGraphics ? maxDpr : Math.min(maxDpr, SAVER_DPR);
