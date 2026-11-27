@@ -637,13 +637,17 @@ renderer.setAnimationLoop(() => {
   ocean.update(dt, elapsed);
   seq.update(dt, performance.now());
   // the avatars' water rings take the sea's colours for the time of day (blended like the sea)
-  if ((ringColAt -= dt) <= 0 && letter.visible) {
+  if ((ringColAt -= dt) <= 0) {
     ringColAt = 0.25;
-    letter.setLook({ tod: ocean.timeOfDay, rain: W.rain, light: ocean.light });   // stationery + ink follow the time and weather
-    letter.circles.myPrecip = W.rain > 0.3 ? 'rain' : null;                       // my own circle shows my weather
     const U = ocean.uniforms, k = U.uMix.value, rgb = i => { const c = ringTmp.copy(U.uPalA.value[i]).lerp(U.uPalB.value[i], k); return c.getHexString().match(/../g).map(h => parseInt(h, 16)); };
-    letter.water.setColors(rgb(4), rgb(3), rgb(1), rgb(5));   // bright, shallow, deep, foam
+    chats.setColors(rgb(4), rgb(3), rgb(1), rgb(5), ocean.light);   // the chat bubble is water too
+    if (letter.visible) {
+      letter.setLook({ tod: ocean.timeOfDay, rain: W.rain, light: ocean.light });   // stationery + ink follow the time and weather
+      letter.circles.myPrecip = W.rain > 0.3 ? 'rain' : null;                       // my own circle shows my weather
+      letter.water.setColors(rgb(4), rgb(3), rgb(1), rgb(5));   // bright, shallow, deep, foam
+    }
   }
+  chats.update(dt, hqGraphics ? 1 / 30 : 1 / 12);              // the water chat bubble (slower in battery saver)
   letter.update(dt);
   boat.update(dt, elapsed);
   if (marker.show && !boat.target) marker.hide();   // arrived

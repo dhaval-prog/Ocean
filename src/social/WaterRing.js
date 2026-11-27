@@ -8,7 +8,7 @@
 
 const TAU = Math.PI * 2;
 
-function waves(seed) {
+export function waves(seed) {
   let s = seed * 9301 + 49297;
   const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
   const list = [];
@@ -19,7 +19,7 @@ function waves(seed) {
 }
 
 /** -1 … 1-ish displacement of the water surface at angle a, time t. */
-function disp(w, a, t, shift = 0) {
+export function disp(w, a, t, shift = 0) {
   let v = 0;
   for (const c of w.list) v += c.amp * Math.sin(c.k * a - c.speed * t + c.phase + shift * c.k * 0.37);
   const env = 1 + 0.55 * Math.sin(2 * a + w.swell[2] * t + w.swell[0]) + 0.3 * Math.sin(3 * a - 0.17 * t + w.swell[1]);
@@ -27,7 +27,7 @@ function disp(w, a, t, shift = 0) {
 }
 
 /** How thick the water is at angle a (1 = average): swells and thin stretches that drift round slowly. */
-function bodyAt(w, a, t) {
+export function bodyAt(w, a, t) {
   const [p1, p2, sp] = w.body;
   const v = 0.55 * Math.sin(2 * a + sp * t + p1) + 0.3 * Math.sin(3 * a - sp * 1.6 * t + p2) + 0.15 * Math.sin(7 * a + sp * 3 * t);
   return Math.max(0.22, 1 + v);                        // never quite disappears

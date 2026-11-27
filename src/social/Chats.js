@@ -10,6 +10,7 @@
 // kept on this device (localStorage).
 import QRCode from 'qrcode';
 import { ME } from './people.js';
+import { ChatBubble } from './ChatBubble.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const KEY = 'ocean.chats', CODE_KEY = 'ocean.inviteCode';
@@ -57,13 +58,16 @@ export class Chats {
     this.data = this._load();
     this.code = this._myCode();
 
-    // the round chat button, bottom right of the ocean
+    // the chat button, bottom right of the ocean: a speech bubble of live water (ChatBubble.js)
     this.btn = document.createElement('button');
     this.btn.type = 'button'; this.btn.className = 'chats-btn';
     this.btn.setAttribute('aria-label', 'Chats');
-    this.btn.innerHTML = `${IC.chat}<span class="badge" hidden></span>`;
-    this.btn.addEventListener('click', e => { e.stopPropagation(); this.open(); });
+    this.btn.innerHTML = `<span class="cb-bob"><canvas class="cb-water" aria-hidden="true"></canvas></span><span class="badge" hidden></span>`;
+    this.btn.addEventListener('click', e => { e.stopPropagation(); this._splashOpen(); });
     root.appendChild(this.btn);
+    this.bubble = new ChatBubble(this.btn.querySelector('canvas'));
+    this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this._acc = 1; this._unreadAt = 0; this._unread = null;
 
     this.el = document.createElement('section');
     this.el.className = 'chats'; this.el.hidden = true;
@@ -77,6 +81,43 @@ export class Chats {
   }
 
   get isOpen() { return !this.el.hidden; }
+
+  /** The sea's colours for the bubble ([r, g, b] each) and how light it is (0 night … 1 day). */
+  setColors(hi, mid, deep, foam, light) { this.bubble.setColors(hi, mid, deep, foam, light); }
+
+  /** Every frame from the app: animate the water bubble (interval: seconds between redraws). */
+  update(dt, interval = 1 / 30) {
+    if (this.btn.hidden) return;
+    this._acc += dt;
+    if (this._acc >= (this.reduce ? 1e9 : interval) || !this.bubble.size) { this.bubble.draw(this.reduce ? 0 : this._acc); this._acc = 0; }
+    if ((this._unreadAt -= dt) <= 0) {                      // a new letter arrived: ripples spread from the bubble
+      this._unreadAt = 0.5;
+      const n = this.friends.reduce((s, f) => s + (f.unread || 0), 0);
+      if (this._unread != null && n > this._unread) this._ripple();
+      if (n !== this._unread) { this._unread = n; this._badge(); }
+    }
+  }
+
+  _ripple() {
+    for (let k = 0; k < 3; k++) {
+      const r = document.createElement('i'); r.className = 'cb-rip'; r.style.animationDelay = (k * 0.35) + 's';
+      this.btn.appendChild(r); setTimeout(() => r.remove(), 2200);
+    }
+    const b = this.btn.querySelector('.badge'); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  }
+
+  /** Tap: a little splash, then the chats open. */
+  _splashOpen() {
+    if (this.reduce) { this.open(); return; }
+    this.btn.classList.add('tap');
+    for (let k = 0; k < 7; k++) {
+      const d = document.createElement('i'); d.className = 'cb-drop';
+      const a = -Math.PI / 2 + (k - 3) * 0.42; d.style.setProperty('--dx', (Math.cos(a) * 30).toFixed(1) + 'px'); d.style.setProperty('--dy', (Math.sin(a) * 30).toFixed(1) + 'px');
+      this.btn.appendChild(d); setTimeout(() => d.remove(), 600);
+    }
+    try { navigator.vibrate?.(8); } catch {}
+    setTimeout(() => { this.btn.classList.remove('tap'); this.open(); }, 230);
+  }
 
   open(page = 'list', arg) {
     this.el.hidden = false; this.btn.hidden = true;
