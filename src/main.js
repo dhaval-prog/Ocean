@@ -16,6 +16,7 @@ import { createControls } from './ui/controls.js';
 import { Weather, PRESETS } from './weather/Weather.js';
 import { Rain } from './weather/Rain.js';
 import { Spray } from './weather/Spray.js';
+import { Lightning } from './weather/Lightning.js';
 import './styles.css';
 
 const app = document.getElementById('app');
@@ -55,6 +56,8 @@ const rain = new Rain();
 const spray = new Spray();
 scene.add(ocean.mesh, particles.points, streaks.mesh, rain.points, spray.points);
 const weather = new Weather();
+const lightning = new Lightning();
+scene.add(lightning.group);
 // lightning lights up the sky behind the sea too
 const flashEl = document.createElement('div'); flashEl.className = 'flash'; flashEl.setAttribute('aria-hidden', 'true');
 
@@ -103,7 +106,7 @@ function applyLook() {
   setCss('--sky-top', '#' + skyTopNow.getHexString());
   setCss('dark', ocean.light < 0.6 ? '1' : '0');
   const dim = 1 - W.clouds * 0.22 - W.rain * 0.08;
-  for (const l of lights) l.intensity = l.userData.base * (ocean.light * dim + weather.flash * 0.8);
+  for (const l of lights) l.intensity = l.userData.base * (ocean.light * dim + weather.flash * 0.4);
   const theme = '#' + ocean.uniforms.uPalB.value[1].getHexString();
   if (cssCache.theme !== theme) { cssCache.theme = theme; themeMeta?.setAttribute('content', theme); }
 }
@@ -138,11 +141,27 @@ Object.assign(weather.cur, weather.target);                      // start in the
 const saveWeather = () => {
   try { localStorage.setItem(WX_KEY, JSON.stringify({ mode: weather.mode, preset: weather.preset, custom: weather.preset === 'custom' ? Object.fromEntries(['storm', 'foam', 'clouds', 'rain', 'fog', 'thunder', 'wind'].map(k => [k, +weather.target[k].toFixed(3)])) : null })); } catch {}
 };
+// A strike: a bolt comes down into the sea. Close ones land in view (never on
+// the boat), distant ones far off toward the top of the screen. The water
+// lights up most around the hit, rings spread from it and spray flies up.
 weather.onThunder = (delay, strength, near) => {
   ambience.thunder(delay, strength, near);
-  // the strike lights the sea most under it: close ones in view, distant ones far off
-  const a = Math.random() * Math.PI * 2, r = near ? 4 + Math.random() * 14 : 40 + Math.random() * 40;
-  ocean.uniforms.uFlashPos.value.set(controls.center.x + Math.cos(a) * r, controls.center.z - Math.abs(Math.sin(a)) * r);
+  // (a bolt rises up the screen from where it hits, so close hits land in the
+  // lower / middle part of the view to keep most of the bolt on screen)
+  let x, z;
+  if (near) {
+    const halfW = controls.worldPerPixel() * app.clientWidth / 2;        // visible half-width (narrow on phones)
+    x = controls.center.x + (Math.random() - 0.5) * 1.5 * halfW; z = controls.center.z - 2 + Math.random() * 10;
+  }
+  else { const a = (Math.random() - 0.5) * 1.6; x = controls.center.x + Math.sin(a) * 50; z = controls.center.z - Math.cos(a) * (35 + Math.random() * 35); }
+  const bx = boat.position.x, bz = boat.position.y, d = Math.hypot(x - bx, z - bz);
+  if (d < 5) { const k = 5 / Math.max(d, 0.01); x = bx + (x - bx) * k; z = bz + (z - bz) * k; }   // never on the boat
+  ocean.uniforms.uFlashPos.value.set(x, z);
+  lightning.strike(x, ocean.base, z, near);
+  if (near) {
+    ocean.addRipple(x, z, 1); setTimeout(() => ocean.addRipple(x + 0.3, z - 0.2, 0.8), 180);
+    spray.burst(x, z, ocean.base, 45, 1.1);
+  }
 };
 const saveTod = () => { try { localStorage.setItem(MODE_KEY, state.mode); localStorage.setItem(TOD_KEY, String(state.tod % 5)); } catch {} };
 let todLabelAt = 0;
@@ -378,7 +397,7 @@ renderer.setAnimationLoop(() => {
   weather.update(dt);
   ocean.setWeather(weather, dt);
   applyLook();
-  flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.3).toFixed(3) : '0';
+  flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.16).toFixed(3) : '0';
   if ((wxSyncAt -= dt) <= 0) { wxSyncAt = 0.5; ui.setWeatherValues(weather.cur); }
   const W = weather.cur;
   // ambient particles: no petals or rising glints in the rain
@@ -415,6 +434,7 @@ renderer.setAnimationLoop(() => {
   // sea spray off the bow in rough water
   const live = boat.ready && !boat.frozen && boat.group.visible;
   if (live) bowPos.set(boat.position.x + Math.cos(boat.heading) * 2.2, 0, boat.position.y - Math.sin(boat.heading) * 2.2);
+  lightning.update(camera, Math.min(1, weather.flash / 0.6));
   spray.setLight(ocean.light);
   spray.update(dt, { bow: live ? bowPos : null, heading: boat.heading, speed01: Math.max(0, boat.speed) / boat.maxSpeed, rough: ocean.storm, water: ocean.base });
   rain.update(elapsed, { center: controls.center, rain: W.rain, wind: W.wind, windDir: weather.windDir, pixelRatio, light: ocean.light });
@@ -431,4 +451,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, boat, marker, smoke, seq, letter, particles, post, ambience, quality };

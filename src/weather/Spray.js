@@ -44,6 +44,16 @@ export class Spray {
   setScale(bufferHeight, fovDeg) { this.uniforms.uScale.value = bufferHeight / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2)); }
   setLight(light) { this.uniforms.uColor.value.setRGB(0.55 + 0.45 * light, 0.62 + 0.38 * light, 0.75 + 0.25 * light); }
 
+  /** A splash thrown up all around a point on the water (e.g. a lightning strike). */
+  burst(x, z, water, n = 40, power = 1) {
+    for (let k = 0; k < n; k++) {
+      const d = this.drops[this.next++ % MAX], a = Math.random() * Math.PI * 2, out = (1 + Math.random() * 2.5) * power;
+      d.age = 0; d.life = 0.6 + Math.random() * 0.6; d.s = 0.1 + Math.random() * 0.18;
+      d.p.set(x + Math.cos(a) * 0.2, water + 0.1, z + Math.sin(a) * 0.2);
+      d.v.set(Math.cos(a) * out, (3 + Math.random() * 4) * power, Math.sin(a) * out);
+    }
+  }
+
   /** bow: world point at the bow; heading radians; speed01 0…1; rough 0…1 (sea state) */
   update(dt, { bow, heading, speed01, rough, water }) {
     const rate = bow ? Math.max(0, speed01 - 0.3) * Math.max(0, rough - 0.3) * 260 : 0;

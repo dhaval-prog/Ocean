@@ -21,7 +21,7 @@ npm run build      # production build in dist/
 - **Foam**: a few big cartoon patches with clean outlines that form, drift downwind and dissolve into lace before forming again elsewhere, plus white caps that sit on the crests of the swell the boat rides and slide off the back as each crest passes. At night the boat's wake and the ripples glow cyan-blue.
 - **Weather** (Account settings): **Clear, Cloudy, Rain, Storm, Fog** presets set sea state, foam, clouds, sky and sound together; the Sea state / Foam / Clouds sliders fine-tune on top (and switch to a Custom fixed weather). Modes: **Changing** (default: drifts by itself every few minutes, e.g. clear, breezy, cloudy, a rain shower, clearing up), **Near me** (real local weather from Open-Meteo, asks for location; coordinates are rounded to ~1 km; refreshes every 15 min; falls back to Changing if location is refused) and **Fixed**. Remembered. `src/weather/Weather.js`.
   - **Rain**: thin motion-blurred streaks of varied length and brightness, slanted by the wind, falling in sheets that sweep across; under them the water goes darker and pitted, with small rings of different sizes; mist cuts the visibility; rain hiss.
-  - **Storm**: lightning flickers in 2–4 strokes, brightest under the strike (close strikes crack almost at once, distant ones are dim glows with a late rumble), darker faster cloud shadows, grey-green sea, foam blown into streaks along the wind, heavy rain and mist, big waves.
+  - **Storm**: lightning bolts strike the sea: a jagged, forked, glowing bolt comes down from the storm into the water (never on the boat), the water lights up around the hit, rings spread and spray flies up. Each strike flickers in 2–4 strokes, brightest under the strike (close strikes crack almost at once, distant ones are dim glows with a late rumble), darker faster cloud shadows, grey-green sea, foam blown into streaks along the wind, heavy rain and mist, big waves.
   - **Fog**: the water fades into soft grey-white with distance in uneven banks that drift with the wind; the sun is a diffuse glow instead of glitter.
   - **Clouds**: soft-edged shadows (two layers); Clear → Overcast dulls and greys the colours and hides the sun glitter. The stylised wind lines give way to rain and fog.
   - **Extras**: a rainbow after a good shower (daytime, not in rain or fog) with a smooth spectrum, a faint secondary bow and the darker band between, sea spray off the bow in rough water at speed, and one wind direction that turns the waves and foam, the smoke and the wind streaks together.
@@ -63,7 +63,8 @@ src/
   core/Clock.js      real clock → time of day
   weather/Weather.js presets, changing + local weather, lightning, rainbow
   weather/Rain.js    falling rain
-  weather/Spray.js   bow spray
+  weather/Spray.js   bow spray, strike splashes
+  weather/Lightning.js lightning bolts
   boat/Boat.js       tugboat: load + merge by colour, toon shading, outline, tap-to-sail, feeds the wake
   boat/Marker.js     destination flag buoy + pulsing rings
   boat/Smoke.js      funnel smoke puffs (one batch)

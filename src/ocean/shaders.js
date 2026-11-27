@@ -316,7 +316,7 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
 
     // lightning: blue-white light, brightest under the strike, the rest of the sea lit by the clouds
     vec2 fdv = (p - uFlashPos)/camH;
-    c += vec3(0.62, 0.68, 0.9)*uFlash*(0.22 + 0.9*exp(-dot(fdv, fdv)*1.4));
+    c += vec3(0.62, 0.68, 0.9)*uFlash*(0.1 + 0.75*exp(-dot(fdv, fdv)*3.0));
 
     // fog: the water fades into soft grey-white with distance
     // fog: the water fades into soft grey-white with distance, in uneven
