@@ -11,7 +11,7 @@ void main() {
   vUv = uv;
   vec3 p = position;
   float h = uv.y;                                       // 0 at the sea … 1 at the cloud
-  float r = mix(0.35, 1.0, pow(h, 1.7)) * (1.0 + 0.08*sin(h*20.0 - uTime*3.0));
+  float r = mix(0.35, 1.0, pow(max(h, 0.0), 1.7)) * (1.0 + 0.08*sin(h*20.0 - uTime*3.0));
   p.xz *= r * 5.0;
   p.x += sin(h*3.2 + uTime*0.5)*h*4.0;                   // the funnel bends and sways
   p.z += cos(h*2.6 + uTime*0.4)*h*2.0;

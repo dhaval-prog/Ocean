@@ -65,7 +65,8 @@ export class Ocean {
       uRainbowPos: { value: new THREE.Vector2() }, uRainbowS: { value: 28 }, uBowMoon: { value: 0 },
       uBeams: { value: Array.from({ length: 3 }, () => new THREE.Vector4(0, 0, 1, 0)) },   // sunbeams through the clouds: x, z, radius, strength
       uSpot: { value: new THREE.Vector4(0, 0, 1, 0) },                                        // boat searchlight on the water: x, z, radius, strength
-      uBoatGlow: { value: 0 },                                                                // gold glow round the boat in a sunbeam
+      uBoatGlow: { value: 0 },
+      uCloudBlobs: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 1, 0)) },                                                                // gold glow round the boat in a sunbeam
     };
 
     const mat = new THREE.MeshStandardMaterial({ name: 'water_surface', roughness: 0.85, metalness: 0, transparent: true, depthWrite: false });

@@ -64,11 +64,12 @@ export class Lightning {
   }
 
   /** A new strike hitting the water at (x, waterY, z). near: a big bright bolt; far: thinner. */
-  strike(x, waterY, z, near = true) {
-    const top = new THREE.Vector3(x + (Math.random() - 0.5) * 8, waterY + 40 + Math.random() * 10, z - 8 - Math.random() * 12);   // leans back into the storm
+  strike(x, waterY, z, near = true, from = null) {
+    // out of the storm cloud above when there is one; else from high up, leaning back into the storm
+    const top = from ? from.clone() : new THREE.Vector3(x + (Math.random() - 0.5) * 8, waterY + 40 + Math.random() * 10, z - 8 - Math.random() * 12);
     const hit = new THREE.Vector3(x, waterY, z);
     const main = [];
-    jag(top, hit, 6, 9, main);
+    jag(top, hit, from ? 5 : 6, Math.min(9, top.distanceTo(hit) * 0.3), main);
     this.paths = [{ pts: main, width: near ? 0.5 : 0.3, fade: 1 }];
     // forks: branch off the upper part of the channel, angle down and away, fade out in the air
     const forks = 2 + Math.floor(Math.random() * (near ? 4 : 2));

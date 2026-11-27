@@ -117,7 +117,7 @@ export class Boat {
     this.searchBeam = new THREE.Mesh(cone, new THREE.ShaderMaterial({
       uniforms: { uI: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       vertexShader: 'varying vec2 vUv; varying float vRim; void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vec3 n = normalize(normalMatrix*normal); vRim = abs(dot(n, normalize(-mv.xyz))); gl_Position = projectionMatrix*mv; }',
-      fragmentShader: 'uniform float uI; varying vec2 vUv; varying float vRim; void main(){ float along = 1.0 - vUv.y; float a = pow(1.0 - along, 1.4)*vRim*vRim*0.32*uI; gl_FragColor = vec4(vec3(1.0, 0.94, 0.78)*a, a); }',
+      fragmentShader: 'uniform float uI; varying vec2 vUv; varying float vRim; void main(){ float along = 1.0 - vUv.y; float a = pow(clamp(1.0 - along, 0.0, 1.0), 1.4)*vRim*vRim*0.32*uI; a = clamp(a, 0.0, 1.0); gl_FragColor = vec4(vec3(1.0, 0.94, 0.78)*a, a); }',
     }));
     this.searchBeam.renderOrder = 36;
     this.searchPivot = new THREE.Object3D();
