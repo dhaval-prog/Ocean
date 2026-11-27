@@ -3,20 +3,19 @@ import { todFromClock } from '../core/Clock.js';
 
 // Everything that makes the contact circles feel alive (the water itself is
 // WaterRing.js):
-//   - the chosen circle swirls faster with a koi swimming laps; the rest calm down
+//   - the chosen circle swirls faster; the rest calm down
 //   - a friend's ring takes the colours of THEIR local time of day, and rain or
 //     snow falls inside it if that's their weather (Open-Meteo, by city)
 //   - "writing to you…": bubbles rise faster and the ring pulses outward
 //   - long-press to peek: their status, the first line of their last letter, when you last wrote
 //   - drag a circle down onto the letter: it splashes and writes "Dear …,"
 //   - new letters arrive as a bottle bobbing into the ring, the number pops up
-//   - streak shells, birthday fish + confetti, night lanterns over online
+//   - birthday fish + confetti, night lanterns over online
 //     friends, night constellations between the friends you write to most,
 //     their status floating in a bottle (tap to pop the cork)
 // The "writing" and "new letter" moments are simulated for the demo.
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const SHELL = '<svg viewBox="0 0 24 24"><path d="M12 3C6.5 3 3 7.5 3 12c0 2 1 3.4 2.6 4.2L7 20h10l1.4-3.8C20 15.4 21 14 21 12c0-4.5-3.5-9-9-9z" fill="#ffd9c0" stroke="#7a4a3a" stroke-width="1.6"/><path d="M12 5v14M8 6l2 13M16 6l-2 13" stroke="#d9906a" stroke-width="1.2"/></svg>';
 const BOTTLE = '<svg viewBox="0 0 24 24"><path d="M10 2h4v3l1 2v13a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V7l1-2z" fill="rgba(190,235,240,.75)" stroke="#2f6f7a" stroke-width="1.4"/><rect x="10" y="1" width="4" height="3" rx="1" fill="#b07a45" class="cork"/><path d="M10.5 11h3v6h-3z" fill="#fff7e3" stroke="#c9a46a" stroke-width=".8"/></svg>';
 const LANTERN = '<svg viewBox="0 0 24 32"><path d="M12 1v4" stroke="#7a5a3a" stroke-width="1.4"/><path d="M6 8c0-2 2.7-3 6-3s6 1 6 3v12c0 2-2.7 3-6 3s-6-1-6-3z" fill="#ffcf73" stroke="#c0712f" stroke-width="1.4"/><path d="M8 7v15M12 6v17M16 7v15" stroke="#e8964a" stroke-width=".8" opacity=".7"/><path d="M9 25h6l-1 3h-4z" fill="#c0712f"/></svg>';
 const FISH = '<svg viewBox="0 0 32 20"><path d="M2 10c4-7 14-8 20-2l8-5-2 7 2 7-8-5C16 18 6 17 2 10z" fill="#ff9d4d" stroke="#7a3a2a" stroke-width="1.3"/><circle cx="8" cy="9" r="1.4" fill="#2a1a1a"/></svg>';
@@ -54,10 +53,6 @@ export class CircleFX {
     const people = letter.recipients;
     letter.people.forEach((btn, i) => {
       const p = people[i], port = btn.querySelector('.port');
-      if (p.streak > 0) {                                       // friendship streak: shells round the ring
-        const n = Math.min(p.streak, 7);
-        port.insertAdjacentHTML('beforeend', `<span class="streak" title="${p.streak}-day streak" aria-hidden="true">${Array.from({ length: n }, (_, k) => `<i style="--a:${-118 - k * 15}deg">${SHELL}</i>`).join('')}${p.streak > 7 ? '<b>+</b>' : ''}</span>`);
-      }
       if (p.status) {                                           // status in a bottle
         port.insertAdjacentHTML('beforeend', `<button type="button" class="sbottle" aria-label="${esc(p.name)}'s status">${BOTTLE}</button>`);
         port.querySelector('.sbottle').addEventListener('click', e => { e.stopPropagation(); this._popStatus(btn, p); });
@@ -83,7 +78,7 @@ export class CircleFX {
     // the chosen circle comes alive; the rest calm down
     L.water.items.forEach((it, k) => {
       const ri = k - 2, sel = ri === L.index;
-      it.speed = sel ? 2.1 : 0.55; it.calm = sel ? 1.15 : 0.7; it.koi = sel;
+      it.speed = sel ? 2.1 : 0.55; it.calm = sel ? 1.15 : 0.7; 
       const p = ri >= 0 ? L.recipients[ri] : null;
       it.precip = p && p.id !== 'me' ? this.weather[p.id] || null : this.myPrecip;
     });
@@ -150,7 +145,7 @@ export class CircleFX {
       p.unread = (p.unread || 0) + 1;
       let badge = port.querySelector('.badge.unread');
       if (!badge) { badge = document.createElement('span'); badge.className = 'badge unread'; port.appendChild(badge); }
-      badge.classList.remove('read', 'bump'); void badge.offsetWidth; badge.classList.add('bump');
+      badge.classList.remove('bump'); void badge.offsetWidth; badge.classList.add('bump');
       badge.textContent = p.unread > 99 ? '99+' : p.unread;
       L.audio?.plop(i + 3);
     }, 1500);

@@ -7,7 +7,7 @@
 //   status:     shown as a message in a bottle floating in their circle
 //   lastLetter: the first line of their last letter (long-press to peek)
 //   lastWrote:  days since you last wrote to them
-//   streak:     days in a row you've written to each other (shells round the circle)
+//   streak:     days in a row you've written to each other (shown when you long-press to peek)
 //   writes:     how often you write to them (night constellations join the closest)
 //   birthday:   'MM-DD' (or 'today' for the demo): fish leap out of their circle
 // The two demo photos are illustrations, not real people.
