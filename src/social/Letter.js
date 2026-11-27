@@ -66,7 +66,7 @@ export class Letter {
     this.row.hidden = true;
     // each avatar sits in a circle of water: a rippling water ring, droplets that
     // splash out from it now and then and bubbles rising inside, round a photo (or
-    // the coloured initials); unread letters = a turning rainbow ring; online = a little boat
+    // the coloured initials); unread letters = a number at the top right; online = a little black boat
     const bubbles = '<span class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
     const water = k => `style="--d:${((k * 0.83) % 2.6).toFixed(2)}s"`;   // each avatar splashes on its own beat
     const avatar = (p, i) => {
@@ -75,7 +75,6 @@ export class Letter {
       return `
       <button type="button" class="person" data-i="${i}" aria-label="Write to ${esc(who)}${extra ? ` (${esc(extra)})` : ''}">
         <span class="port" ${water(i + 2)}>
-          ${p.unread ? '<span class="ring" aria-hidden="true"></span>' : ''}
           <span class="splash" aria-hidden="true"></span>
           <span class="face" style="--c:${p.color}">
             <span class="initials">${esc(p.initials)}</span>
@@ -83,6 +82,7 @@ export class Letter {
             ${bubbles}
           </span>
           ${p.online ? `<span class="online" title="On the ocean now">${ICONS.boat}</span>` : ''}
+          ${p.unread ? `<span class="badge unread" aria-hidden="true">${p.unread > 99 ? '99+' : p.unread}</span>` : ''}
         </span>
         <span class="name">${esc(p.name)}</span><span class="city">${esc(p.city)}</span>
       </button>`;
@@ -144,12 +144,12 @@ export class Letter {
       if (this._first === false) this._tick();
     }
     this._first = false;
-    // their unread letters count as read once you have stayed on them a moment: the ring fades
+    // their unread letters count as read once you have stayed on them a moment: the number fades
     clearTimeout(this._readTimer);
     const r0 = this.recipients[this.index];
     if (r0.unread) this._readTimer = setTimeout(() => {
       r0.unread = 0;
-      this.people[this.index]?.querySelector('.ring')?.classList.add('read');
+      this.people[this.index]?.querySelector('.badge.unread')?.classList.add('read');
     }, 1800);
     const r = this.recipient;
     this.text.placeholder = r.id === 'me' ? 'Write something for your loved one' : `Write something for ${r.name}`;
