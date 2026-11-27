@@ -346,7 +346,8 @@ export const GLSL_FRAGMENT = /* glsl */ `#include <color_fragment>
 
     // lightning: blue-white light, brightest under the strike, the rest of the sea lit by the clouds
     vec2 fdv = (p - uFlashPos)/camH;
-    c += uFlashCol*0.8*uFlash*(0.1 + 0.3*fx.z + 0.75*exp(-dot(fdv, fdv)*3.0));   // coloured by the time of day; lights the whole sea at night
+    vec3 fcol = uFlashCol / max(max(uFlashCol.r, uFlashCol.g), max(uFlashCol.b, 0.001));   // the bolt's hue at full brightness (dark red, yellow, blue …)
+    c += fcol*0.8*uFlash*(0.1 + 0.3*fx.z + 0.75*exp(-dot(fdv, fdv)*3.0));   // coloured by the time of day; lights the whole sea at night
 
     // fog: the water fades into soft grey-white with distance
     // fog: the water fades into soft grey-white with distance, in uneven

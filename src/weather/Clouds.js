@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-// Thick, puffy cartoon clouds drifting between the camera and the sea. Each
-// cloud is a tight cluster of overlapping cel-shaded puffs (lumpy edge, lit
-// side toward the sun, shaded side, soft highlight, ink rim, like the boat's
-// smoke), drawn as camera-facing quads in one instanced draw call.
+// Thick, puffy clouds drifting between the camera and the sea. Each cloud is
+// a tight cluster of overlapping soft puffs (frayed edges, rounded light and
+// shadow, darker undersides, a silver lining on the sunny side, no outlines),
+// drawn as camera-facing quads in one instanced draw call.
 //   - cloudy: white clouds floating fairly low over the sea
 //   - storm: dark slate clouds, lower and bigger; lightning comes out of them
 //   - each casts a soft shadow straight down on the water (ocean shader)
@@ -26,22 +26,27 @@ void main() {
 }`;
 
 const FRAG = /* glsl */ `
-uniform vec3 uLit; uniform vec3 uShade; uniform vec3 uInk;
+uniform vec3 uLit; uniform vec3 uShade; uniform vec3 uBase; uniform float uTime;
 varying vec2 vQ; varying float vSeed; varying float vAlpha; varying float vH;
+float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+float n2(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0 - 2.0*f);
+  return mix(mix(h2(i), h2(i + vec2(1, 0)), u.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), u.x), u.y); }
+float fbm2(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ v += a*n2(p); p = p*2.07 + 3.1; a *= 0.5; } return v; }
 void main() {
-  vec2 q = vQ;                                   // -0.5 … 0.5
-  float a = atan(q.y, q.x), d = length(q);
-  float r = 0.43 + 0.03*sin(a*3.0 + vSeed*6.28) + 0.022*sin(a*5.0 - vSeed*11.0) + 0.012*sin(a*9.0 + vSeed*3.0);
-  float f = max(fwidth(d), 1e-3);
-  float body = 1.0 - smoothstep(r - f, r + f, d);
-  if (body*vAlpha < 0.01) discard;
-  float lit = step(0.0, q.x*-0.5 + q.y*0.86 + 0.06);              // lit from the upper left (toward the sun)
-  vec3 col = mix(uShade, uLit, lit);
-  col = mix(col, uLit*1.05, smoothstep(0.2, 0.0, length(q - vec2(-0.12, 0.15)))*0.5);   // soft highlight
-  col *= 0.94 + 0.06*smoothstep(-0.5, 0.5, vH);                   // a touch darker underneath
-  float rim = smoothstep(r - 0.045 - f, r - 0.045 + f, d);
-  col = mix(col, uInk, rim*0.65);
-  gl_FragColor = vec4(col, body*vAlpha);
+  // a soft, billowy puff of cloud: no outline; a frayed edge that fades out,
+  // rounded light-and-shadow, darker underneath, a bright rim on the sunny side
+  vec2 q = vQ*2.0;                                     // -1 … 1
+  float d = length(q);
+  float nz = fbm2(q*1.6 + vSeed*17.0 + vec2(uTime*0.03, 0.0));
+  float edge = 1.0 - smoothstep(0.25, 1.0, d + (nz - 0.5)*0.55);
+  float dens = edge*edge*(0.75 + 0.25*nz);
+  if (dens*vAlpha < 0.01) discard;
+  vec3 nrm = normalize(vec3(q*0.9, sqrt(max(0.0, 1.0 - min(d*d, 1.0))) + 0.2));
+  float ndl = dot(nrm, normalize(vec3(-0.55, 0.65, 0.55)));          // sun from the upper left
+  vec3 col = mix(uShade, uLit, smoothstep(-0.5, 0.9, ndl + (nz - 0.5)*0.4));
+  col = mix(uBase, col, smoothstep(-0.9, 0.2, q.y + (nz - 0.5)*0.5)); // grey-dark undersides
+  col += uLit*0.18*smoothstep(0.35, 0.9, d)*max(ndl, 0.0)*edge;       // silver lining
+  gl_FragColor = vec4(col, min(1.0, dens*1.25)*vAlpha);
 }`;
 
 const WHITE = new THREE.Color(1, 1, 1), SLATE = new THREE.Color('#5d6478'), BLUEGREY = new THREE.Color('#8592b2');
@@ -59,7 +64,7 @@ export class Clouds {
     geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(Float32Array.from({ length: MAX }, Math.random), 1));
     geo.instanceCount = MAX;
     this.uniforms = {
-      uLit: { value: new THREE.Color('#fbfbff') }, uShade: { value: new THREE.Color('#c3cadc') }, uInk: { value: new THREE.Color('#5a5f7e') },
+      uLit: { value: new THREE.Color('#fbfbff') }, uShade: { value: new THREE.Color('#c3cadc') }, uBase: { value: new THREE.Color('#9aa3b6') }, uTime: { value: 0 },
       uBoatNdc: { value: new THREE.Vector2(9, 9) }, uAspect: { value: 1 },
     };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: this.uniforms, transparent: true, depthWrite: false }));
@@ -78,7 +83,7 @@ export class Clouds {
       c.puffs.push({
         dx: Math.cos(a) * rr * 1.15, dz: Math.sin(a) * rr * 0.7,
         dy: i >= 8 ? 0.5 + Math.random() * 0.6 : (Math.random() - 0.5) * 0.4,
-        s: (i === 0 ? 1.15 : i >= 8 ? 0.85 : 0.7 + Math.random() * 0.3) * c.r * 1.05,
+        s: (i === 0 ? 1.15 : i >= 8 ? 0.85 : 0.7 + Math.random() * 0.3) * c.r * 1.35,
       });
     }
     c.puffs.sort((p, q) => (p.dy - q.dy) || (p.dz - q.dz));   // lower and farther puffs first
@@ -86,7 +91,7 @@ export class Clouds {
   }
 
   /** The height a cloud floats at (storm clouds hang lower). */
-  static height(storm) { return storm ? 5 + Math.random() * 1.2 : 7 + Math.random() * 2; }
+  static height(storm) { return storm ? 6.5 + Math.random() * 1.2 : 8 + Math.random() * 2; }
 
   update(dt, { center, halfW, cover, storm, fog, windDir, wind, light, sky, camera, pitch, boat }) {
     const want = cover < 0.3 || fog > 0.5 ? 0 : Math.round(2 + (cover - 0.3) * 6 + storm * 2);   // cloudy ~4, storm ~8; fog hides them
@@ -131,7 +136,8 @@ export class Clouds {
     const U = this.uniforms;
     U.uLit.value.copy(sky).lerp(WHITE, 0.6).lerp(SLATE, storm * 0.8).multiplyScalar(0.4 + 0.6 * light);
     U.uShade.value.copy(U.uLit.value).multiplyScalar(0.78).lerp(BLUEGREY, 0.22 * (1 - storm)).multiplyScalar(1 - storm * 0.15);
-    U.uInk.value.copy(U.uShade.value).multiplyScalar(0.55);
+    U.uBase.value.copy(U.uShade.value).multiplyScalar(0.72 - storm * 0.2);       // darker underneath (much darker in a storm)
+    U.uTime.value += dt;
     U.uAspect.value = camera.aspect;
     if (boat) { this._v.set(boat.x, boat.y, boat.z).project(camera); U.uBoatNdc.value.set(this._v.x, this._v.y); }
   }
@@ -139,6 +145,12 @@ export class Clouds {
   /** Shadows straight below the clouds, for the ocean shader: up to 8 × (x, z, radius, strength). */
   shadows(out) {
     out.forEach((v, i) => { const c = this.clouds[i]; if (c) v.set(c.x, c.z, c.r * 1.15, c.fade * (c.storm ? 0.85 : 0.6)); else v.w = 0; });
+  }
+
+  /** A storm cloud in view (near the view centre), for a close strike to come down from; or null. */
+  stormCloudNear(x, z, maxDist = 22) {
+    const cands = this.clouds.filter(c => c.storm && c.fade > 0.6 && c.out < 0 && Math.hypot(c.x - x, c.z - z) < maxDist);
+    return cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
   }
 
   /** The base of the storm cloud nearest (x, z), for lightning to come out of; or null. */

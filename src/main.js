@@ -157,7 +157,11 @@ weather.onThunder = (delay, strength, near) => {
   // (a bolt rises up the screen from where it hits, so close hits land in the
   // lower / middle part of the view to keep most of the bolt on screen)
   let x, z;
-  if (near) {
+  const sc = near ? clouds.stormCloudNear(camera.position.x, camera.position.z - (camera.position.y - 6) / Math.tan(THREE.MathUtils.degToRad(controls.pitch))) : null;
+  if (sc) {
+    // straight down out of a storm cloud: hit the sea just below it (a little toward the viewer so the bolt shows)
+    x = sc.x + (Math.random() - 0.5) * sc.r * 0.6; z = sc.z + 1 + Math.random() * 3;
+  } else if (near) {
     const halfW = controls.worldPerPixel() * app.clientWidth / 2;        // visible half-width (narrow on phones)
     x = controls.center.x + (Math.random() - 0.5) * 1.5 * halfW; z = controls.center.z - 2 + Math.random() * 10;
   }
@@ -498,6 +502,7 @@ renderer.setAnimationLoop(() => {
   ocean.setWeather(weather, dt);
   applyLook();
   flashEl.style.opacity = weather.flash > 0.01 ? (weather.flash * 0.16).toFixed(3) : '0';
+  if (weather.flash > 0.01) { const fc = ocean.uniforms.uFlashCol.value, m = Math.max(fc.r, fc.g, fc.b, 0.001); flashEl.style.background = `rgb(${[fc.r, fc.g, fc.b].map(v => Math.round(255 * Math.min(1, 0.35 + 0.65 * v / m))).join(',')})`; }
   if ((wxSyncAt -= dt) <= 0) { wxSyncAt = 0.5; ui.setWeatherValues(weather.cur); }
   const W = weather.cur;
   // ambient particles: no petals or rising glints in the rain

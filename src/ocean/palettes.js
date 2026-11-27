@@ -5,17 +5,18 @@ import * as THREE from 'three';
 // fx:  sparkle, light shafts, night glow, sun/moon disc
 // sun: colour and strength of the sun (moon at night) path reflected on the water
 // wx: weather tints for this light: rain drops/rings/spray, lightning, fog
+//     (lightning: dark blue at dawn, white-blue by day, dark red at sunset, warm yellow at dusk, blue-white at night)
 // ambient: particles: petals (dawn/sunset), specks (night), glints (lights rising off the water)
 export const TIMES = [
   { name: 'Dawn',   light: 0.85, fx: [0.4, 0.3, 0.0, 0.7],  sun: ['#ffd2b8', 0.75], ambient: { petals: 1.0,  specks: 0.0, glints: 0.3 },
-    wx: { rain: '#ffd4c2', bolt: '#ffe2f0', fog: '#f6d6d0' }, pal: ['#4a4f9e','#5f6fc0','#7f9be0','#a9c3f0','#f2c6dc','#fff4f6','#fbd9e6','#ffe1c4','#ffffff','#f6d9e4'] },
+    wx: { rain: '#ffd4c2', bolt: '#1f3fae', fog: '#f6d6d0' }, pal: ['#4a4f9e','#5f6fc0','#7f9be0','#a9c3f0','#f2c6dc','#fff4f6','#fbd9e6','#ffe1c4','#ffffff','#f6d9e4'] },
   // day: deep blues sit at a true sea-blue hue (~210°) instead of leaning violet
   { name: 'Day',    light: 1.0,  fx: [0.2, 0.6, 0.0, 0.55], sun: ['#fff6e2', 0.45], ambient: { petals: 0.15, specks: 0.0, glints: 0.1 },
     wx: { rain: '#e4ecf4', bolt: '#e8f0ff', fog: '#dfe6ea' }, pal: ['#0c4485','#1468b4','#1590d0','#1cbfdc','#5be3e8','#f2ffff','#d9f2f6','#f6ffff','#ffffff','#d8f1f3'] },
   { name: 'Sunset', light: 0.8,  fx: [0.6, 0.8, 0.0, 1.0],  sun: ['#ffb347', 1.0],  ambient: { petals: 0.9,  specks: 0.0, glints: 0.4 },
-    wx: { rain: '#ffc27a', bolt: '#fff0d8', fog: '#f4cf98' }, pal: ['#32226e','#53359a','#9c4fa6','#e06e9c','#ffa576','#fff2d8','#ffc7b4','#ffd060','#fff7c4','#f7c9a8'] },
+    wx: { rain: '#ffc27a', bolt: '#b3161f', fog: '#f4cf98' }, pal: ['#32226e','#53359a','#9c4fa6','#e06e9c','#ffa576','#fff2d8','#ffc7b4','#ffd060','#fff7c4','#f7c9a8'] },
   { name: 'Dusk',   light: 0.55, fx: [0.8, 0.1, 0.35, 0.6], sun: ['#e2cbff', 0.5],  ambient: { petals: 0.2,  specks: 0.4, glints: 0.8 },
-    wx: { rain: '#cdbdf4', bolt: '#e4d4ff', fog: '#c4bce4' }, pal: ['#1b1a55','#2a2a7a','#43409e','#6a5fc2','#a78ae0','#e8dcff','#b5a8ec','#f0c8ff','#ffffff','#9b8fd1'] },
+    wx: { rain: '#cdbdf4', bolt: '#ffc23a', fog: '#c4bce4' }, pal: ['#1b1a55','#2a2a7a','#43409e','#6a5fc2','#a78ae0','#e8dcff','#b5a8ec','#f0c8ff','#ffffff','#9b8fd1'] },
   // night: dimmer foam so the sea reads moonlit, not snowy
   { name: 'Night',  light: 0.3,  fx: [0.35, 0.0, 1.0, 0.9],  sun: ['#d6e4ff', 0.85], ambient: { petals: 0.0,  specks: 1.0, glints: 1.0 },
     wx: { rain: '#a8c4f4', bolt: '#d4e4ff', fog: '#7f90b8' }, pal: ['#04071f','#081039','#0f1d55','#123a75','#1667a0','#8d9ccc','#26336f','#d8ecff','#e3e8ff','#1c2350'] },
