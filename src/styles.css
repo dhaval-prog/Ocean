@@ -194,7 +194,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 
 /* --- people row at the top (you in the middle, friends to the right) ------ */
 .people {
-  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(142px + var(--safe-t)); padding-top: calc(12px + var(--safe-t));
+  position: absolute; z-index: 12; left: 0; right: 0; top: 0; height: calc(156px + var(--safe-t)); padding-top: calc(10px + var(--safe-t));
   overflow: hidden; touch-action: none;
   background: linear-gradient(to bottom, var(--card) 0%, transparent 100%);
 }
@@ -203,18 +203,20 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .people { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%); }
 .people-track { display: flex; gap: 28px; align-items: flex-start; width: max-content; transition: transform 0.45s cubic-bezier(.2, .9, .25, 1.1); }
 .person {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 76px; padding: 0; border: 0; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 90px; padding: 0; border: 0; background: none;
   font: inherit; color: var(--ink); opacity: 0.38; transition: opacity 0.35s, transform 0.35s cubic-bezier(.2, .9, .3, 1.2); cursor: pointer;
 }
 .person.selected { opacity: 1; }
 .person.extra { cursor: default; }
 /* --- water avatars: each sits in a circle of water - a rippling ring, droplets
    splashing out from it and bubbles rising inside - round a photo or initials --- */
-.person .port { position: relative; display: grid; place-items: center; margin: 10px 0 9px; }
+.person .port { position: relative; display: grid; place-items: center; margin: 15px 0 13px; }
 .person .face {
   position: relative; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
   background: var(--c, #ccc); color: #fff; font: 700 18px/1 system-ui, sans-serif; letter-spacing: 0.02em;
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35), inset 0 -6px 12px rgba(40, 120, 200, 0.28);   /* lit from the water */
+  /* no border: the picture fades out softly toward its round edge */
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 72%, rgba(0, 0, 0, 0.6) 86%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, #000 72%, rgba(0, 0, 0, 0.6) 86%, transparent 100%);
   transition: width 0.3s, height 0.3s, font-size 0.3s;
 }
 .person .face img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }   /* the photo covers the initials */
@@ -222,21 +224,20 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .person .face > svg { position: relative; z-index: 1; }
 /* the rippling ring of water */
 .person .port::before {
-  content: ''; position: absolute; inset: -6px; z-index: 1; pointer-events: none;
+  content: ''; position: absolute; inset: -11px; z-index: 1; pointer-events: none;   /* a clear gap of sea between the picture and the water */
   background: url('/water/ring.svg') center / 100% 100% no-repeat;
   filter: drop-shadow(0 1px 2px rgba(20, 80, 140, 0.35));
-  animation: water-ripple 5s ease-in-out infinite; animation-delay: calc(var(--d, 0s) * -1);
+  animation: water-turn 24s linear infinite; animation-delay: calc(var(--d, 0s) * -5);   /* slow, steady, one way */
 }
-@keyframes water-ripple { 0%, 100% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(14deg) scale(1.035, 0.975); } }
+@keyframes water-turn { to { transform: rotate(1turn); } }
 /* a soft wet highlight on top */
 .person .port::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 2; pointer-events: none;
-  background: radial-gradient(ellipse 34% 16% at 34% 22%, rgba(255, 255, 255, 0.7), transparent 70%),
-              radial-gradient(circle at 70% 78%, rgba(255, 255, 255, 0.25), transparent 22%);
+  background: radial-gradient(ellipse 30% 14% at 36% 24%, rgba(255, 255, 255, 0.55), transparent 70%);
 }
 /* droplets splashing out from the ring every few seconds */
 .person .splash {
-  position: absolute; inset: -14px; z-index: 0; pointer-events: none; opacity: 0;
+  position: absolute; inset: -20px; z-index: 0; pointer-events: none; opacity: 0;
   background: url('/water/splash.svg') center / 100% 100% no-repeat;
   animation: water-splash 3.2s cubic-bezier(.2, .7, .3, 1) infinite; animation-delay: var(--d, 0s);
 }
@@ -267,7 +268,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 }
 /* unread letters: a rainbow ring outside the water that slowly turns, fading once read */
 .person .ring {
-  position: absolute; inset: -11px; border-radius: 50%; z-index: 0; pointer-events: none;
+  position: absolute; inset: -16px; border-radius: 50%; z-index: 0; pointer-events: none;
   background: conic-gradient(#ff7a59, #ffc94a, #5ed39b, #4aa8ff, #b27bff, #ff7a59);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
@@ -277,7 +278,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 @keyframes ring-turn { to { transform: rotate(1turn); } }
 /* on the ocean right now: a little boat bobbing on the avatar */
 .person .online {
-  position: absolute; right: -7px; bottom: -5px; z-index: 3; width: 20px; height: 20px; border-radius: 50%;
+  position: absolute; right: -12px; bottom: -10px; z-index: 3; width: 20px; height: 20px; border-radius: 50%;
   display: grid; place-items: center; background: #fff; color: #2f6fb5; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   animation: boat-bob 2.4s ease-in-out infinite;
 }
@@ -297,24 +298,25 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
 .person .face svg { width: 38%; height: 38%; }
 .person .port .badge, .person .port .plus { z-index: 3; }
 .person .face .plus, .person .port .plus {
-  position: absolute; right: -4px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  position: absolute; right: -10px; bottom: -8px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
   background: #6cc06c; color: #fff; font: 700 14px/1 system-ui, sans-serif; border: 1.5px solid #fff;
 }
 .people .badge { font-size: 9.5px; border-width: 1.5px; }
-.people .badge { background: #7d9be0; top: -8%; right: -8%; }
-.people .badge.warm { background: #e48a73; top: auto; bottom: 2%; right: -6%; }
+.people .badge { background: #7d9be0; top: -16%; right: -16%; }
+.people .badge.warm { background: #e48a73; top: auto; bottom: -10%; right: -18%; }
 .person .name { font-weight: 600; font-size: 12px; white-space: nowrap; }
 .person.selected .name { font-size: 14px; font-weight: 700; }
 .person .city { font-size: 11px; opacity: 0.7; }
 @media (max-width: 640px) {
-  .people { height: calc(124px + var(--safe-t)); }
-  .people-track { gap: 12px; }
-  .person { width: 62px; }
+  .people { height: calc(136px + var(--safe-t)); }
+  .people-track { gap: 10px; }
+  .person { width: 74px; }
   .person .face { width: 44px; height: 44px; font-size: 15px; }
   .person.selected .face { width: 54px; height: 54px; font-size: 18px; }
   .person .name { font-size: 11px; } .person.selected .name { font-size: 13px; }
   .person .city { font-size: 10px; }
-  .person .online { width: 17px; height: 17px; right: -6px; }
+  .person .online { width: 17px; height: 17px; right: -11px; bottom: -9px; }
+  .person .port { margin: 13px 0 11px; }
 }
 
 /* while writing, the ocean UI steps back */
