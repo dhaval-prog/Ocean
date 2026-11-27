@@ -311,7 +311,7 @@ export class SinkSequence {
    */
   _foldPlane(k) {
     const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.27;
-    const snap = 0.75 * Math.hypot(PW / 72, PH / 90);                    // ≥ half the longest triangle edge
+    const snap = 1.01 * Math.hypot(PW / 72, PH / 90);                   // ≥ the longest triangle edge: no triangle can straddle a crease unbent
     const st = i => Math.min(1, Math.max(0, k * 8 - i));                 // progress of fold i (0-based)
     const e = i => { const x = st(i); return x * x * (3 - 2 * x); };
     const s22 = Math.sin(Math.PI / 8), c22 = Math.cos(Math.PI / 8), r2 = Math.SQRT1_2;
@@ -344,8 +344,9 @@ export class SinkSequence {
       // 6-8: fold in half (halves swing back), then each wing down
       if (!out && st(5) > 0) {
         if (Math.abs(qx) < snap) qx = 0;                                  // onto the centre (keel) crease
-        const phi = e(5) * (Math.PI / 2 - 0.2 * Math.min(1, Math.max(0, (hh - qy) / PH))), side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);   // the keel is shut at the nose and opens a little toward the tail
+        const phi = e(5) * (Math.PI / 2 - 0.22 * Math.pow(Math.min(1, Math.max(0, (hh - qy) / PH)), 3)), side = qx >= 0 ? 1 : -1, psi = side > 0 ? e(7) : e(6);   // the keel stays shut (stuck together) most of the way and opens only toward the tail
         let u = Math.abs(qx); if (Math.abs(u - d) < snap && psi > 0) { u = d; cz[n] = 1; }  // onto the wing crease
+        else if (u < d - snap) cz[n] = 0;                                 // inside the keel: no fold lines (they'd dot the top seam)
         let X, Z;
         if (u <= d || psi === 0) { X = side * u * Math.cos(phi); Z = -u * Math.sin(phi); }
         else {
@@ -354,7 +355,7 @@ export class SinkSequence {
           const al = a1 + ((side > 0 ? DIHEDRAL : -Math.PI - DIHEDRAL) - a1) * psi;   // wings end a little raised
           X = fx + w * Math.cos(al) * (1 + 0.2 * psi); Z = fz + w * Math.sin(al);   // wings spread a little: a broad dart
         }
-        out = [X + side * qz * Math.sin(phi), qy, Z + qz * Math.cos(phi)];
+        out = [X + (qx === 0 ? 0 : side) * qz * Math.sin(phi), qy, Z + qz * Math.cos(phi)];   // the seam itself isn't pushed to one side
       }
       if (!out) out = [qx, qy, qz];
       a.setXYZ(n, out[0], out[1], out[2]);
