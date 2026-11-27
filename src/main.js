@@ -80,6 +80,8 @@ const funnelPos = new THREE.Vector3();
 const seqHint = document.getElementById('seq-hint');
 const seq = new SinkSequence({
   scene, camera, dom: renderer.domElement, boat, ocean,
+  getWind: () => ({ dir: weather.windDir, strength: weather.cur.wind }),   // the paper drifts with the wind
+  onDrip: p => spray.drip(p),                                                // water dripping off the wet paper
   onChange: mode => {
     controls.enabled = mode === 'idle';                // the camera holds still during the sequence
     if (mode !== 'idle') marker.hide();

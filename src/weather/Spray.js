@@ -49,6 +49,13 @@ export class Spray {
     else this.uniforms.uColor.value.setRGB(0.55 + 0.45 * light, 0.62 + 0.38 * light, 0.75 + 0.25 * light);
   }
 
+  /** One drop of water falling off something wet (e.g. the paper rising from the sea). */
+  drip(p) {
+    const d = this.drops[this.next++ % this.drops.length];
+    d.age = 0; d.life = 0.7 + Math.random() * 0.5; d.s = 0.05 + Math.random() * 0.04;
+    d.p.copy(p); d.v.set((Math.random() - 0.5) * 0.3, -0.2 - Math.random() * 0.4, (Math.random() - 0.5) * 0.3);
+  }
+
   /** A splash thrown up all around a point on the water (e.g. a lightning strike). */
   burst(x, z, water, n = 40, power = 1) {
     for (let k = 0; k < n; k++) {
