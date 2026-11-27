@@ -454,3 +454,43 @@ body.writing .panel, body.writing .brand, body.writing .icon-btn { opacity: 0; p
 .gust.left i { animation-name: gust-l; }
 @keyframes gust-r { from { transform: translateX(-110%); } to { transform: translateX(110vw); } }
 @keyframes gust-l { from { transform: translateX(110vw); } to { transform: translateX(-110%); } }
+
+/* --- gestures: help and safety nets --------------------------------------- */
+/* no iPhone text-selection popup / magnifier on the circles and the paper */
+.people, .people * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.letter { -webkit-touch-callout: none; }
+.letter .letter-text { -webkit-user-select: text; user-select: text; }   /* typing must keep working on iPhone */
+/* the friend the held plane is heading for */
+.person.aim .port { filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 4px rgba(120, 200, 255, 0.9)); transform: scale(1.08); transition: transform 0.15s, filter 0.15s; }
+/* drawing with the pen */
+.letter .pen-pill { position: absolute; z-index: 7; top: calc(var(--u) * 3); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  padding: 5px 6px 5px 12px; border-radius: 999px; background: rgba(30, 30, 60, 0.82); color: #fff; font: 600 12px/1 system-ui, sans-serif; white-space: nowrap; }
+.letter .pen-pill[hidden] { display: none; }
+.letter .pen-pill button { border: 0; border-radius: 999px; padding: 6px 10px; background: #fff; color: #2a2a55; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; }
+/* first letter: a finger shows drag down (plane) and drag up (bottle) */
+.letter .coach { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.letter .coach .finger { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0 40%, rgba(120, 160, 255, 0.35) 62%, transparent 70%);
+  box-shadow: 0 2px 10px rgba(40, 60, 140, 0.35); animation: coach-finger 4.8s ease-in-out 2 both; }
+@keyframes coach-finger {
+  0% { transform: translateY(-40px); opacity: 0; } 8% { opacity: 1; } 38% { transform: translateY(70px); opacity: 1; } 46% { opacity: 0; transform: translateY(70px); }
+  52% { transform: translateY(40px); opacity: 0; } 60% { opacity: 1; } 90% { transform: translateY(-70px); opacity: 1; } 100% { transform: translateY(-70px); opacity: 0; } }
+.letter .coach .lbl { position: absolute; left: 50%; transform: translateX(-50%); padding: 5px 10px; border-radius: 999px; background: rgba(30, 30, 60, 0.8); color: #fff;
+  font: 600 12px/1 system-ui, sans-serif; white-space: nowrap; opacity: 0; }
+.letter .coach .lbl.down { top: 66%; animation: coach-lbl-down 4.8s ease-in-out 2 both; }
+.letter .coach .lbl.up { top: 28%; animation: coach-lbl-up 4.8s ease-in-out 2 both; }
+@keyframes coach-lbl-down { 0%, 10% { opacity: 0; } 18%, 42% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes coach-lbl-up { 0%, 56% { opacity: 0; } 64%, 92% { opacity: 1; } 100% { opacity: 0; } }
+/* press and hold the letter: a menu with every gesture as a button */
+.lmenu { position: fixed; z-index: 30; width: 210px; padding: 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.97); box-shadow: 0 10px 30px rgba(20, 30, 80, 0.3);
+  display: flex; flex-direction: column; gap: 2px; animation: tray-in 0.18s ease-out; }
+.lmenu button { border: 0; border-radius: 9px; padding: 11px 12px; background: transparent; color: #2a2433; font: 600 14px/1.1 system-ui, sans-serif; text-align: left; cursor: pointer; }
+.lmenu button:hover, .lmenu button:focus-visible { background: #eef1ff; outline: none; }
+/* after a throw: a few seconds to take it back */
+.unsend { position: absolute; z-index: 30; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 16px; border-radius: 999px; background: rgba(25, 28, 55, 0.88); color: #fff; font: 600 14px/1 system-ui, sans-serif; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); animation: unsend-in 0.25s cubic-bezier(.3, 1.4, .5, 1); transition: opacity 0.3s; }
+.unsend.out { opacity: 0; }
+.unsend button { border: 0; border-radius: 999px; padding: 8px 14px; background: #ffd36b; color: #2a2433; font: 700 14px/1 system-ui, sans-serif; cursor: pointer; }
+@keyframes unsend-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (prefers-reduced-motion: reduce) { .letter .coach .finger, .letter .coach .lbl { animation-duration: 3s; } .gust { display: none; } }

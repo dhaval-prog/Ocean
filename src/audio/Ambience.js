@@ -161,6 +161,22 @@ export class Ambience {
     this._noiseHit(0.18, 'highpass', 3500, 0.5, 0.05, 0.08);
   }
 
+  /** A paper crease for fold step n (each a little higher and crisper than the last). */
+  crease(n = 0) {
+    this._noiseHit(0.16, 'bandpass', 900 + n * 260, 1.4, 0.05);
+    this._noiseHit(0.1, 'highpass', 3000 + n * 300, 0.7, 0.03, 0.03);
+  }
+
+  /** The shape is finished: a firm paper snap and a soft low knock. */
+  ready() {
+    this._noiseHit(0.26, 'bandpass', 2400, 0.9, 0.06);
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.12);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.2);
+  }
+
   /** A soft water plop, pitched per friend (i). */
   plop(i = 0) {
     if (!this.ctx || this.muted) return;
