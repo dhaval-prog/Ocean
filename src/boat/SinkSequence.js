@@ -9,7 +9,8 @@ import * as THREE from 'three';
 
 const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
-const DUR = { sink: 2.6, fly: 2.8, toScreen: 0.9, hover: 1.4, thrown: 1.3, reform: 2.2 };
+// tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
+const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, thrown: 1.3, reform: 2.2 };
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -127,12 +128,14 @@ export class SinkSequence {
     this.setMode('held');
   }
 
-  setMode(m) { this.mode = m; this.t0 = this._now; this.onChange?.(m); }
+  /** at: when the new stage starts (default now); passing the previous stage's scheduled end keeps the total exact at any frame rate. */
+  setMode(m, at = this._now) { this.mode = m; this.t0 = at; this.onChange?.(m); }
 
   /** Start the sequence (only from idle). */
   start() {
     if (this.mode !== 'idle' || !this.boat.ready) return;
     this.boat.frozen = true;
+    this._now = performance.now();                       // the clock starts at the tap itself
     this.spot = new V3(this.boat.position.x, this.ocean.base, this.boat.position.y);
     this._lastRip = -1;
     this.setMode('sink');
@@ -216,7 +219,7 @@ export class SinkSequence {
         ]);
         this.ocean.addRipple(s.x, s.z, 1);
         this.wet.value = 1;                                            // comes out soaked
-        this.setMode('fly');
+        this.setMode('fly', this.t0 + DUR.sink * 1000);
       }
     } else if (this.mode === 'fly') {
       // like a leaf on the wind: rising in pulses along the flight path, it swings
@@ -226,7 +229,7 @@ export class SinkSequence {
       const along = 1 - Math.pow(1 - k, 1.5);
       const base = this._flight.getPoint(along);
       const right = new V3(1, 0, 0).applyQuaternion(this.camera.quaternion).setY(0).normalize();
-      const ph = t * 2.7, swing = Math.sin(ph), amp = 0.25 + 0.75 * Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.5);   // swings grow once clear of the water
+      const ph = t * 3.8, swing = Math.sin(ph), amp = 0.25 + 0.75 * Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.5);   // swings grow once clear of the water
       const fade = 1 - smoothstep(0.75, 1, k);                     // calms down as it nears you
       const w = this.getWind?.() || { dir: [1, 0], strength: 0.3 };
       const drift = k * k * (0.4 + w.strength * 1.6) * fade;
@@ -242,7 +245,7 @@ export class SinkSequence {
       this._bend(t, Math.min(1, 0.35 + Math.abs(Math.cos(ph)) * 0.6) * (0.4 + 0.6 * fade));   // curls as it catches the air
       this.wet.value = 1 - smoothstep(0.35, 1.0, k) * 0.55;            // starts drying in the air
       this._drip(dt, P, k < 0.85 ? 0.06 : 0.14);
-      if (k >= 1) { this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone(); this.setMode('toScreen'); }
+      if (k >= 1) { this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone(); this.setMode('toScreen', this.t0 + DUR.fly * 1000); }
     } else if (this.mode === 'toScreen') {
       const k = ease(Math.min(1, t / DUR.toScreen)), tg = this._cardTarget();
       P.position.lerpVectors(this._fromP, tg.p, k);
@@ -250,18 +253,18 @@ export class SinkSequence {
       this._bend(t, 0.6 * (1 - k));
       this.wet.value = 0.45 - 0.2 * k;
       this._drip(dt, P, 0.2);
-      if (k >= 1) this.setMode('hover');
+      if (k >= 1) this.setMode('hover', this.t0 + DUR.toScreen * 1000);
     } else if (this.mode === 'hover') {
       // a short pause in front of you: a little springy bounce and a gentle sway, then it settles
       const k = Math.min(1, t / DUR.hover), tg = this._cardTarget();
       const up = new V3(0, 1, 0).applyQuaternion(tg.q), rt = new V3(1, 0, 0).applyQuaternion(tg.q);
-      const bounce = 0.16 * Math.exp(-t * 3.2) * Math.cos(t * 9.5);
-      const sway = Math.sin(t * 3.1) * Math.exp(-t * 1.8);
+      const bounce = 0.16 * Math.exp(-t * 5) * Math.cos(t * 14);
+      const sway = Math.sin(t * 4.6) * Math.exp(-t * 3.4);
       P.position.copy(tg.p).addScaledVector(up, bounce).addScaledVector(rt, sway * 0.07);
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bounce * 0.8, sway * 0.1, -sway * 0.12)));
-      this._bend(t, 0.25 * Math.exp(-t * 2.5) + 0.02);
+      this._bend(t, 0.25 * Math.exp(-t * 4) + 0.02);
       this.wet.value = 0.25 * (1 - k);                                  // the last damp edges dry off
-      if (k >= 1) { this.wet.value = 0; this.setMode('card'); }
+      if (k >= 1) { this.wet.value = 0; this.setMode('card', this.t0 + DUR.hover * 1000); }
     } else if (this.mode === 'card') {
       const tg = this._cardTarget();
       P.position.copy(tg.p).add(new V3(0, Math.sin(t * 1.6) * 0.03, 0).applyQuaternion(tg.q));
