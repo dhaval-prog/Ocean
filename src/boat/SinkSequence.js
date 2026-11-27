@@ -13,6 +13,8 @@ import { paintPaper } from '../social/Stationery.js';
 const V3 = THREE.Vector3;
 export const PW = 1.6, PH = 2.0;                            // paper size (world units)
 // tap → letter ready: 1.7 + 1.8 + 0.6 + 0.9 = 5.0 s
+// the folded plane, seen from above: nose up the screen, tipped a little away from you
+const PLANE_TILT = 0.38, PLANE_SCALE = 0.6, DIHEDRAL = 0.24;
 const DUR = { sink: 1.7, fly: 1.8, toScreen: 0.6, hover: 0.9, fold: 1.4, plane: 1.3, bottle: 2.2, reform: 2.2 };
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -35,12 +37,13 @@ export class SinkSequence {
 
     this.geo = new THREE.PlaneGeometry(PW, PH, 72, 90);   // fine enough for crisp diagonal fold lines
     this.base = this.geo.attributes.position.array.slice();
+    this.geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(this.geo.attributes.position.count * 3).fill(1), 3));
     this.canvas = document.createElement('canvas');
     this.canvas.width = 640; this.canvas.height = Math.round(640 * PH / PW);
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
     this.tex.anisotropy = 4;
-    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide });
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide, alphaTest: 0.5, vertexColors: true });
     // wet paper: darker, greyer blotches and soaked edges that dry out (uWet 1 → 0);
     // the edges stay wet longest, like real paper drying
     this.wet = { value: 0 };
@@ -248,7 +251,22 @@ export class SinkSequence {
   }
 
   /** Morph the sheet: 0 = flat paper, 1 = folded into a paper plane ('plane') or rolled up into a scroll ('bottle'). */
-  _shape(kind, k) { if (kind === 'plane') this._foldPlane(k); else this._rollUp(k); }
+  _shape(kind, k) {
+    if (kind === 'plane') { this._foldPlane(k); this._shade(k > 0); } else { this._rollUp(k); this._shade(false); }
+  }
+
+  /** Soft light from the upper right on the folded paper, so the wings, folds and keel read in 3D (plain white when off). */
+  _shade(on) {
+    const c = this.geo.attributes.color;
+    if (!on) { if (this._shaded) { c.array.fill(1); c.needsUpdate = true; this._shaded = false; } return; }
+    this.geo.computeVertexNormals();
+    const nr = this.geo.attributes.normal, lx = 0.71, ly = 0.2, lz = 0.68;
+    for (let i = 0; i < c.count; i++) {
+      const v = Math.min(1, 0.3 + 1.03 * Math.abs(nr.getX(i) * lx + nr.getY(i) * ly + nr.getZ(i) * lz));
+      c.setXYZ(i, v, v, v * 1.01);
+    }
+    c.needsUpdate = true; this._shaded = true;
+  }
 
   /**
    * A classic paper dart in 8 folds (k 0 … 1, one eighth each), the paper
@@ -262,7 +280,7 @@ export class SinkSequence {
    * and lies on top. Each vertex is folded in order, so later folds carry the
    * earlier flaps along. Once a fold starts, the points right next to its
    * crease snap onto the crease line, so every fold edge is perfectly straight
-   * (instead of following the grid in steps). The wings spread wide as they fold.
+   * (instead of following the grid in steps). The wings spread a little and end slightly raised.
    */
   _foldPlane(k) {
     const a = this.geo.attributes.position, b = this.base, hw = PW / 2, hh = PH / 2, d = 0.13;
@@ -305,8 +323,8 @@ export class SinkSequence {
         else {
           const fx = side * d * Math.cos(phi), fz = -d * Math.sin(phi), w = u - d;
           let a1 = Math.atan2(-Math.sin(phi), side * Math.cos(phi)); if (side < 0 && a1 > 0) a1 -= 2 * Math.PI;
-          const al = a1 + ((side > 0 ? 0 : -Math.PI) - a1) * psi;
-          X = fx + w * Math.cos(al) * (1 + 0.45 * psi); Z = fz + w * Math.sin(al);   // wings spread wide: a broad, bulky plane
+          const al = a1 + ((side > 0 ? DIHEDRAL : -Math.PI - DIHEDRAL) - a1) * psi;   // wings end a little raised
+          X = fx + w * Math.cos(al) * (1 + 0.2 * psi); Z = fz + w * Math.sin(al);   // wings spread a little: a broad dart
         }
         out = [X + side * qz * Math.sin(phi), qy, Z + qz * Math.cos(phi)];
       }
@@ -344,7 +362,7 @@ export class SinkSequence {
     Bt.scale.setScalar(Math.max(0.01, scale) * 1.45);
   }
 
-  _flatten() { this.geo.attributes.position.array.set(this.base); this.geo.attributes.position.needsUpdate = true; this.paper.scale.setScalar(1); }
+  _flatten() { this._shade(false); this.geo.attributes.position.array.set(this.base); this.geo.attributes.position.needsUpdate = true; this.paper.scale.setScalar(1); }
 
   _buildBottle(scene) {
     // a little glass bottle with a cork, slipped round the rolled-up letter
@@ -461,9 +479,9 @@ export class SinkSequence {
       const sv = this.shapeS, tg = this._cardTarget(), sw = Math.sin(t * 1.1) * (1 - Math.abs(sv) * 0.6);
       const up = new V3(0, 1, 0).applyQuaternion(tg.q);
       P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0));
-      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 - (sv > 0 ? 0.9 * sv : 0), Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));   // a plane tilts back, top away from you
+      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03 - (sv > 0 ? PLANE_TILT * sv : 0), Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));   // a plane tilts back, top away from you
       const Bt = this.bottle;
-      P.scale.setScalar(1 - 0.22 * Math.max(0, sv));                       // the folded plane sits comfortably on screen
+      P.scale.setScalar(1 - (1 - PLANE_SCALE) * Math.max(0, sv));                       // the folded plane sits comfortably on screen
       if (sv > 0) { this._shape('plane', sv); Bt.visible = false; }          // the finger moves straight through the 8 folds
       else if (sv < 0) {
         const roll = Math.min(1, -sv / 0.72), close = Math.max(0, (-sv - 0.72) / 0.28);   // roll up, then the bottle closes round it
@@ -477,7 +495,7 @@ export class SinkSequence {
       this._shape(this.sendKind, k);
       P.position.copy(this._fromP).addScaledVector(up, (this.sendKind === 'plane' ? 0.25 : 0) * k);
       P.quaternion.copy(this._fromQ);
-      if (this.sendKind === 'plane') { P.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), -0.9 * k)); P.scale.setScalar(1 - 0.22 * k); }   // tilts back as it folds
+      if (this.sendKind === 'plane') { P.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), -PLANE_TILT * k)); P.scale.setScalar(1 - (1 - PLANE_SCALE) * k); }   // tilts back as it folds
       if (t >= DUR.fold) {
         this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone();
         if (this.sendKind === 'bottle') { this.bottle.visible = true; this._placeBottle(0.01); this._glass().opacity = 0.38; }
