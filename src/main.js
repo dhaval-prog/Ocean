@@ -93,6 +93,7 @@ const letter = new Letter({ root: app, seq, hint: seqHint });
 boat.load().catch(err => console.warn('Boat failed to load', err));
 
 const post = new Post(renderer, scene, camera);
+post.setUninked(seq.paper);   // no ink outlines on the letter paper
 const ambience = new Ambience();
 letter.audio = ambience;                                  // writing sounds, plops, mood music
 seq.planeTarget = () => letter.targetPoint();             // the paper plane flies into the chosen contact's circle
