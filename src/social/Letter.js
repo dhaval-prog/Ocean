@@ -7,7 +7,7 @@ import { CircleFX } from './Circles.js';
 // The letter you write on the paper that pops out of the sea, plus the row of
 // people at the top of the screen.
 //   Writing: every letter draws itself in like a pen stroke, in ink that follows
-//   the time of day; "Dear …," writes itself at the top and your name signs at
+//   the time of day; "to …" writes itself at the top and your name signs at
 //   the bottom; every few words bubbles (fireflies at night) drift up. The paper
 //   (stationery, mood) is painted by Stationery.js onto the 3D sheet.
 //   Decorate: doodle with the pen, add stickers, choose paper and mood, add a
@@ -207,8 +207,7 @@ export class Letter {
       r0.unread = 0;
       this.people[this.index]?.querySelector('.badge.unread')?.classList.add('read');
     }, 1800);
-    this.text.placeholder = 'Write something…';
-    if (changed && this.visible) this._writeDear();
+    if (changed && this.visible) { this._writeDear(); this._typePrompts(); }
     this._layoutRow();
   }
 
@@ -323,13 +322,33 @@ export class Letter {
     }
   }
 
-  /** "Dear Aarav," writes itself at the top; your name signs at the bottom. */
+  /** "to Aarav" writes itself at the top; your name signs at the bottom. */
   _writeDear() {
-    const r = this.recipient, text = r.id === 'me' ? 'Note to self,' : `Dear ${r.name},`;
+    const r = this.recipient, text = r.id === 'me' ? 'to myself' : `to ${r.name}`;
     const chars = [...text].map((ch, i) => ch === ' ' ? ' ' : `<span class="c f" style="animation-delay:${i * 55}ms">${esc(ch)}</span>`).join('');
-    this.dearEl.innerHTML = `<span class="dear-text">${chars}</span><svg class="flourish" viewBox="0 0 120 12" preserveAspectRatio="none"><path d="M2 8c18-6 30 4 48-1s26-6 40-2 18 3 28-2" /></svg>`;
+    this.dearEl.innerHTML = `<span class="dear-text">${chars}</span>`;
     this.dearEl.style.setProperty('--len', text.length);
     this.dear = text;
+  }
+
+  /** The empty letter's prompt types itself, holds, erases and moves on to the next one. */
+  _typePrompts() {
+    clearTimeout(this._promptTimer);
+    const r = this.recipient, who = r.id === 'me' ? 'future you' : r.name;
+    const prompts = ['Write something for your loved one', `Tell ${who} about your day...`, 'What made you smile today?', `Something only ${who} would get...`];
+    let p = 0, n = 0, dir = 1;
+    const step = () => {
+      if (!this.visible) { this.text.placeholder = ''; return; }
+      const full = prompts[p];
+      n += dir;
+      this.text.placeholder = full.slice(0, n);
+      let wait = dir > 0 ? 70 + Math.random() * 60 : 28;
+      if (dir > 0 && n >= full.length) { dir = -1; wait = 2200; }
+      else if (dir < 0 && n <= 0) { dir = 1; p = (p + 1) % prompts.length; wait = 450; }
+      this._promptTimer = setTimeout(step, wait);
+    };
+    this.text.placeholder = ''; n = 0;
+    this._promptTimer = setTimeout(step, 700);
   }
 
   _writeSign() {
@@ -657,7 +676,7 @@ export class Letter {
       this.el.hidden = false; this.row.hidden = false;
       document.body.classList.add('writing');
       this._applyLook(true);
-      this._writeDear(); this._writeSign();
+      this._writeDear(); this._writeSign(); this._typePrompts();
       requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); });
       this.circles.open();
     }

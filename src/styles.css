@@ -181,7 +181,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   white-space: pre-wrap; overflow-wrap: break-word; letter-spacing: 0;
 }
 .letter-text { outline: none; resize: none; background: transparent; color: transparent; caret-color: var(--ink, #3d4aa3); pointer-events: none; z-index: 2; overflow: hidden; }
-.letter-text::placeholder { color: var(--ink, #4a56b0); opacity: 0.6; }
+.letter-text::placeholder { color: var(--ink, #4a56b0); opacity: 0.9; }
 .letter .ink { color: var(--ink, #3d4aa3); overflow: hidden; pointer-events: none; z-index: 1; text-shadow: 0 0 6px var(--ink-glow, transparent); }
 .letter .ink .w, .letter .dear .c, .letter .sign .c { display: inline-block; white-space: pre; }
 .letter .ink .c { display: inline-block; transform: rotate(var(--r, 0deg)) translateY(var(--y, 0px)); }
@@ -191,15 +191,11 @@ input[type='range'] { width: 100%; accent-color: var(--accent); margin: 4px 0; h
   55% { opacity: 1; }
   100% { clip-path: inset(-40% -60% -40% -40%); filter: none; }   /* ends wider than the glyph so slanted strokes aren't cut */
 }
-/* "Dear …," at the top with a flourish, your name signing at the bottom */
+/* "to …" at the top, your name signing at the bottom */
 .letter .dear {
   align-self: flex-start; position: relative; min-height: calc(var(--u) * 9); margin-bottom: calc(var(--u) * 2);
-  font: 600 calc(var(--u) * 7.2)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent);
+  font: 500 calc(var(--u) * 6.6)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent);
 }
-.letter .dear .flourish { position: absolute; left: 0; bottom: calc(var(--u) * -1.6); width: 105%; height: calc(var(--u) * 2.6); overflow: visible; }
-.letter .dear .flourish path { fill: none; stroke: var(--ink, #3d4aa3); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 140; stroke-dashoffset: 140; opacity: 0.7;
-  animation: flourish 0.9s ease-out forwards; animation-delay: calc(var(--len, 10) * 55ms + 100ms); }
-@keyframes flourish { to { stroke-dashoffset: 0; } }
 .letter .sign { align-self: flex-end; min-height: calc(var(--u) * 8); margin: calc(var(--u) * 1) calc(var(--u) * 2) calc(var(--u) * 2) 0;
   font: 600 calc(var(--u) * 6.4)/1.2 'Caveat', cursive; color: var(--ink, #3d4aa3); text-shadow: 0 0 6px var(--ink-glow, transparent); }
 /* tools in the top-right corner of the paper: clear, pen, decorate */

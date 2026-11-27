@@ -40,7 +40,7 @@ export class SinkSequence {
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
     this.tex.anisotropy = 4;
-    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide });
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide, alphaTest: 0.5 });
     // wet paper: darker, greyer blotches and soaked edges that dry out (uWet 1 → 0);
     // the edges stay wet longest, like real paper drying
     this.wet = { value: 0 };

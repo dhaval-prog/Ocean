@@ -116,6 +116,10 @@ export function paintPaper(g, w, h, look, grain, comp = null, images = {}) {
   }
   if (comp) drawLetter(g, w, h, comp, images);
   g.restore();
+  // rounded corners: cut the corners away (the paper material drops see-through texels)
+  const rr = w * 0.045;
+  g.save(); g.globalCompositeOperation = 'destination-in'; g.fillStyle = '#000';
+  g.beginPath(); g.roundRect(0, 0, w, h, rr); g.fill(); g.restore();
   return P;
 }
 
@@ -137,7 +141,7 @@ function drawLetter(g, w, h, c, images) {
   const font = c.font || 'Caveat';
   g.fillStyle = c.ink; g.textAlign = 'center'; g.textBaseline = 'top';
   if (c.doodles) g.drawImage(c.doodles, 0, 0, w, h);
-  if (c.dear) { g.font = `600 ${w * 0.075}px "${font}", cursive`; g.textAlign = 'left'; g.fillText(c.dear, w * 0.1, h * 0.08); g.textAlign = 'center'; }
+  if (c.dear) { g.font = `500 ${w * 0.066}px "${font}", cursive`; g.textAlign = 'left'; g.fillText(c.dear, w * 0.1, h * 0.08); g.textAlign = 'center'; }
   if (c.text) {
     const size = w * 0.066; g.font = `500 ${size}px "${font}", "Comic Sans MS", cursive`;
     wrap(g, c.text, w * 0.82).slice(0, 14).forEach((l, i) => g.fillText(l, w / 2, h * 0.18 + i * size * 1.25));
