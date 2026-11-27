@@ -1,6 +1,6 @@
 import { ME, FRIENDS, NOTIFICATIONS, INBOX } from './people.js';
 import { WaterRings } from './WaterRing.js';
-import { PAPER_STYLES, MOODS, resolvePaper, inkFor } from './Stationery.js';
+import { resolvePaper, inkFor } from './Stationery.js';
 import { STICKERS, stickerURL } from './stickers.js';
 import { CircleFX } from './Circles.js';
 
@@ -63,12 +63,7 @@ export class Letter {
       <canvas class="doodle" aria-hidden="true"></canvas>
       <div class="deco"></div>
       <div class="tray" hidden>
-        <div class="tray-tabs" role="tablist">
-          <button type="button" data-tab="paper" class="on">Paper</button><button type="button" data-tab="mood">Mood</button><button type="button" data-tab="stickers">Stickers</button>
-        </div>
-        <div class="tray-pane" data-pane="paper">${PAPER_STYLES.map(p => `<button type="button" class="chip" data-style="${p.id}"><i class="sw sw-${p.id}"></i>${p.name}</button>`).join('')}</div>
-        <div class="tray-pane" data-pane="mood" hidden>${MOODS.map(m => `<button type="button" class="chip" data-mood="${m.id}"><i class="dot" style="background:${m.color || 'transparent'}"></i>${m.name}</button>`).join('')}</div>
-        <div class="tray-pane" data-pane="stickers" hidden>${Object.keys(STICKERS).map(k => `<button type="button" class="stk-pick" data-sticker="${k}" aria-label="Add a ${k}"><img src="${stickerURL(k)}" alt="" draggable="false"></button>`).join('')}</div>
+        <div class="tray-pane" data-pane="stickers">${Object.keys(STICKERS).map(k => `<button type="button" class="stk-pick" data-sticker="${k}" aria-label="Add a ${k}"><img src="${stickerURL(k)}" alt="" draggable="false"></button>`).join('')}</div>
       </div>
       <div class="dear" aria-hidden="true"></div>
       <div class="ink-wrap">
@@ -78,7 +73,6 @@ export class Letter {
       <div class="voice" hidden><canvas></canvas><button type="button" class="vplay" aria-label="Play the voice note">${ICONS.play}</button></div>
       <div class="sign" aria-hidden="true"></div>
       <div class="sparks" aria-hidden="true"></div>
-      <div class="pen-pill" hidden>Drawing <button type="button" aria-label="Done drawing">✓ Done</button></div>
       <div class="letter-actions">
         <div class="acts-track">
           <button type="button" data-tool="clear" class="tool" aria-label="Clear doodles" hidden>${ICONS.eraser}</button>
@@ -87,7 +81,7 @@ export class Letter {
           <button type="button" data-act="mic" class="primary" aria-label="Record a voice note">${ICONS.mic}</button>
           <button type="button" data-act="bell" aria-label="Remind me">${ICONS.bell}</button>
           <button type="button" data-act="inbox" aria-label="Letters in your inbox">${ICONS.inbox}<span class="badge">${INBOX}</span></button>
-          <button type="button" data-tool="decor" class="tool" aria-label="Paper, mood and stickers" aria-expanded="false">${ICONS.sparkle}</button>
+          <button type="button" data-tool="decor" class="tool" aria-label="Stickers" aria-expanded="false">${ICONS.sparkle}</button>
         </div>
       </div>
       <input type="file" accept="image/*" hidden>`;
@@ -361,16 +355,17 @@ export class Letter {
   /** The bottom carousel starts with the mic button in the middle. */
   _centreActions() {
     const a = this.el.querySelector('.letter-actions'), m = a.querySelector('[data-act=mic]');
-    a.scrollLeft = m.offsetLeft + m.offsetWidth / 2 - a.clientWidth / 2;
+    if (this._actsTouched || !a.clientWidth) return;                         // the user has scrolled it themselves
+    const ar = a.getBoundingClientRect(), mr = m.getBoundingClientRect();
+    a.scrollLeft += (mr.left + mr.width / 2) - (ar.left + ar.width / 2);
   }
 
-  /** Drawing with the pen on or off (while on, a pill says so; ✓, a tap outside the paper or a second finger ends it). */
+  /** Drawing with the pen on or off (the pen button, a tap outside the paper or a second finger ends it). */
   _setPen(on) {
     this.pen = on;
     const b = this.el.querySelector('.letter-actions [data-tool=pen]');
     b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
     this.el.classList.toggle('pen-on', on); this.el.querySelector('[data-tool=clear]').hidden = !on;
-    this.el.querySelector('.pen-pill').hidden = !on;
     if (on) { this.text.blur(); this._coachOff(); }
     this._syncHint();
   }
@@ -387,24 +382,14 @@ export class Letter {
       else if (t === 'clear') { this.strokes = []; this._redrawDoodles(); }
       else if (t === 'decor') this._toggleTray();
     });
-    const pill = this.el.querySelector('.pen-pill');
-    pill.addEventListener('pointerdown', e => e.stopPropagation());
-    pill.querySelector('button').addEventListener('click', e => { e.stopPropagation(); this._setPen(false); });
     this.tray.addEventListener('pointerdown', e => e.stopPropagation());
     this.tray.addEventListener('click', e => {
       e.stopPropagation();
-      const tab = e.target.closest('[data-tab]'), st = e.target.closest('[data-style]'), md = e.target.closest('[data-mood]'), sk = e.target.closest('[data-sticker]');
-      if (tab) {
-        this.tray.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b === tab));
-        this.tray.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== tab.dataset.tab; });
-      }
-      if (st) { this.look.style = st.dataset.style; this._markTray(); this._applyLook(true); this.audio?.rustle(); }
-      if (md) { this.look.mood = md.dataset.mood; this._markTray(); this._applyLook(true); this.audio?.setMood(md.dataset.mood); }
+      const sk = e.target.closest('[data-sticker]');
       if (sk) this._addSticker(sk.dataset.sticker, 0.2 + Math.random() * 0.6, 0.3 + Math.random() * 0.4, true);
     });
-    this._markTray();
     // actions along the bottom
-    this.el.querySelector('.letter-actions').addEventListener('pointerdown', e => e.stopPropagation());
+    this.el.querySelector('.letter-actions').addEventListener('pointerdown', e => { e.stopPropagation(); this._actsTouched = true; });
     this.el.querySelector('[data-act=camera]').addEventListener('click', e => { e.stopPropagation(); this.file.click(); });
     this.file.addEventListener('change', () => { const f = this.file.files?.[0]; if (f) this._addPhoto(f); this.file.value = ''; });
     this.el.querySelector('[data-act=mic]').addEventListener('click', e => { e.stopPropagation(); this._toggleVoice(); });
@@ -415,11 +400,6 @@ export class Letter {
     this.tray.hidden = !open;
     this.el.querySelector('[data-tool=decor]').setAttribute('aria-expanded', String(open));
     this.el.querySelector('[data-tool=decor]').classList.toggle('on', open);
-  }
-
-  _markTray() {
-    this.tray.querySelectorAll('[data-style]').forEach(b => b.classList.toggle('on', b.dataset.style === this.look.style));
-    this.tray.querySelectorAll('[data-mood]').forEach(b => b.classList.toggle('on', b.dataset.mood === this.look.mood));
   }
 
   _addSticker(type, x, y, pop = false) {
@@ -517,7 +497,7 @@ export class Letter {
     window.addEventListener('pointerup', e => down.delete(e.pointerId));
     window.addEventListener('pointercancel', e => down.delete(e.pointerId));
     this.el.addEventListener('pointerdown', e => {
-      if (e.target.closest('button, .tray, .letter-actions, .pen-pill')) return;
+      if (e.target.closest('button, .tray, .letter-actions')) return;
       down.add(e.pointerId);
       this._coachOff();
       if (this.pen && down.size > 1) {                                       // a second finger: drawing ends
@@ -826,7 +806,9 @@ export class Letter {
       document.body.classList.add('writing');
       this._applyLook(true);
       this._writeDear(); this._writeSign(); this._typePrompts();
+      this._actsTouched = false;
       requestAnimationFrame(() => { this._layoutRow(); this._redrawDoodles(); this._centreActions(); });
+      setTimeout(() => this._centreActions(), 300);
       setTimeout(() => { if (this.seq.mode === 'card') this._coach(); }, 1600);   // the very first letter: show the gestures
       this.circles.open();
     }
@@ -861,7 +843,7 @@ export class Letter {
     const r = this.seq.screenRect(), s = this.el.style;
     s.left = r.x + 'px'; s.top = r.y + 'px'; s.width = r.w + 'px'; s.height = r.h + 'px';
     s.setProperty('--u', (r.w / 100) + 'px');
-    if (Math.abs((this._dw || 0) - r.w) > 2) { this._dw = r.w; this._redrawDoodles(); if (this.voice) this._drawVoice(); }
+    if (Math.abs((this._dw || 0) - r.w) > 2) { this._dw = r.w; this._redrawDoodles(); if (this.voice) this._drawVoice(); this._centreActions(); }
     const vh = window.innerHeight;
     this.hint.style.top = Math.min(r.y + r.h + 12, vh - (this.hint.offsetHeight || 22) - 10) + 'px';
   }
