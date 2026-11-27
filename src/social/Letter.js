@@ -4,7 +4,7 @@ import { WaterRings } from './WaterRing.js';
 // The letter you write on the paper that pops out of the sea, plus the row of
 // people at the top of the screen (you in the middle, friends in the ocean to
 // the right, dimmed). Swipe left / right (or tap an avatar) to choose who the
-// letter is for. Drag and flick the paper to send it back into the sea.
+// letter is for (or swipe sideways on the paper). Drag and flick the paper up or down to send it back into the sea.
 
 const ICONS = {
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
@@ -40,24 +40,33 @@ export class Letter {
     this.text = this.el.querySelector('.letter-text');
     this.text.addEventListener('input', () => this._syncHint());
 
-    // a tap on the paper writes; a drag on it picks the paper up to flick it
+    // On the paper the first movement decides: a sideways swipe changes who the
+    // letter is for; an up / down drag picks the paper up to flick it into the
+    // sea. A tap writes.
     let press = null;
     this.el.addEventListener('pointerdown', e => {
       if (e.target.closest('button')) return;
-      press = { id: e.pointerId, x: e.clientX, y: e.clientY, grabbed: false };
+      press = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: null };
       e.preventDefault();
     });
     window.addEventListener('pointermove', e => {
-      if (!press || press.id !== e.pointerId || press.grabbed) return;
-      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) {
-        press.grabbed = true;
-        this.text.blur();
+      if (!press || press.id !== e.pointerId || press.mode) return;
+      const dx = e.clientX - press.x, dy = e.clientY - press.y;
+      if (Math.hypot(dx, dy) < 10) return;
+      this.text.blur();
+      if (Math.abs(dx) > Math.abs(dy) * 1.15) press.mode = 'swipe';      // sideways: choose someone else
+      else {                                                              // up / down: pick the paper up
+        press.mode = 'grab';
         this.seq.grab({ pointerId: e.pointerId, clientX: press.x, clientY: press.y });
       }
     });
     window.addEventListener('pointerup', e => {
       if (!press || press.id !== e.pointerId) return;
-      if (!press.grabbed) { this.text.focus(); const n = this.text.value.length; this.text.setSelectionRange(n, n); }
+      if (!press.mode) { this.text.focus(); const n = this.text.value.length; this.text.setSelectionRange(n, n); }
+      else if (press.mode === 'swipe') {
+        const dx = e.clientX - press.x;
+        if (Math.abs(dx) > 40) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = performance.now(); }
+      }
       press = null;
     });
 
@@ -105,7 +114,8 @@ export class Letter {
     this.people.forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - this._swipedAt > 350) this.select(+b.dataset.i); }));
     this._swipedAt = 0;
 
-    // swipe left / right anywhere outside the paper to change who it's for
+    // anywhere else on the letter screen: swipe left / right to change who it's
+    // for, flick up / down to send the letter into the sea
     let sw = null;
     root.addEventListener('pointerdown', e => {
       if (!this.visible || e.target.closest('.letter')) return;   // swipes can start anywhere but the paper
@@ -113,8 +123,12 @@ export class Letter {
     }, { capture: true });
     window.addEventListener('pointerup', e => {
       if (!sw || sw.id !== e.pointerId) return;
-      const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+      const dx = e.clientX - sw.x, dy = e.clientY - sw.y, ms = performance.now() - sw.t;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) { this.select(this.index + (dx < 0 ? 1 : -1)); this._swipedAt = performance.now(); }
+      else if (Math.abs(dy) > Math.abs(dx) * 1.3 && !e.target.closest('button') && ((Math.abs(dy) > 50 && ms < 700) || Math.abs(dy) > 120)) {   // a quick flick, or a long deliberate swipe
+        this.text.blur();
+        this.seq.flick(0, Math.sign(dy), Math.min(14, 6 + Math.abs(dy) / Math.max(ms, 60) * 4));   // into the sea, up or down
+      }
       sw = null;
     });
     window.addEventListener('keydown', e => {
@@ -202,6 +216,6 @@ export class Letter {
     s.setProperty('--u', (r.w / 100) + 'px');              // 1% of the paper width
     // guide text sits just under the paper (or inside its bottom edge if the screen is short)
     const vh = window.innerHeight;
-    this.hint.style.top = Math.min(r.y + r.h + 12, vh - 34) + 'px';
+    this.hint.style.top = Math.min(r.y + r.h + 12, vh - (this.hint.offsetHeight || 22) - 10) + 'px';
   }
 }
