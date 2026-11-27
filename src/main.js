@@ -36,6 +36,7 @@ let hqGraphics = (() => { try { return localStorage.getItem('ocean.graphics') !=
 const SAVER_DPR = 1.25;
 const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
 let pixelRatio = hqGraphics ? maxDpr : Math.min(maxDpr, SAVER_DPR);
+let calmSince = 0, stillFrameAt = 0, needFrame = false, ringsAt = 0;   // battery saver's still picture (see the loop)
 renderer.setPixelRatio(pixelRatio);
 renderer.domElement.className = 'scene';
 app.prepend(renderer.domElement);
@@ -481,6 +482,7 @@ function drift(dt) {
 // --- sizing & adaptive quality ---------------------------------------------
 let W = 1, H = 1;
 function applySize() {
+  needFrame = true;                                     // a new size (rotation, the keyboard): redraw the still picture
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(W, H, false);
   post.setSize(W, H, pixelRatio);
@@ -511,6 +513,8 @@ function setGraphics(hq) {
   quality.max = hq ? maxDpr : Math.min(maxDpr, SAVER_DPR);        // battery saver: a fixed, lower 3D resolution
   quality.enabled = hq && params.get('quality') !== 'fixed';
   quality.capped = false; quality.set(quality.max);
+  letter.ringInterval = hq ? 0 : 0.1;                             // friends' water rings at ~10 fps in battery saver
+  needFrame = true;
 }
 setGraphics(hqGraphics);
 // battery saver: 30 fps while nothing moves fast (calm sea, writing, reading); 60 while a finger
@@ -519,10 +523,14 @@ let fingers = 0, touchedAt = 0;
 addEventListener('pointerdown', () => { fingers++; touchedAt = performance.now(); }, true);
 addEventListener('pointerup', () => { fingers = Math.max(0, fingers - 1); touchedAt = performance.now(); }, true);
 addEventListener('pointercancel', () => { fingers = Math.max(0, fingers - 1); }, true);
-addEventListener('keydown', () => { touchedAt = performance.now(); }, true);
 const calm = now => fingers === 0 && now - touchedAt > 600 && !controls.dragging && !boat.target
   && (seq.mode === 'idle' || seq.mode === 'card' || (seq.mode === 'shaping' && seq._shapeTarget == null));
 let lastFrameAt = 0;
+// battery saver, writing or reading the letter: the scene is drawn once and then holds still as a
+// picture (no 3D rendering at all); only the friends row keeps moving, at ~10 fps. It comes back to
+// life as soon as a finger touches the screen or anything changes, and refreshes once a minute.
+const paintPaper = seq.paint.bind(seq);
+seq.paint = (...a) => { needFrame = true; return paintPaper(...a); };   // the paper changed: draw it
 
 // --- loop -----------------------------------------------------------------------
 const timer = new THREE.Timer();
@@ -531,8 +539,18 @@ let elapsed = 0, glowTimer = 0, dropTimer = 1, wxSyncAt = 0, ringColAt = 0;
 const ringTmp = new THREE.Color();
 const lookWx = { glints: 0, petals: 0, specks: 0 }, windVec = [0, 0], bowPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const nowMs = performance.now();
-  if (!hqGraphics && calm(nowMs) && nowMs - lastFrameAt < 1000 / 30 - 3) return;   // skip this frame entirely
+  const nowMs = performance.now(), isCalm = calm(nowMs);
+  const still = !hqGraphics && isCalm && seq.mode === 'card' && letter.visible;
+  calmSince = still ? (calmSince || nowMs) : 0;
+  if (still && nowMs - calmSince > 500) {
+    if (!needFrame && nowMs - stillFrameAt < 60000) {
+      if (nowMs - ringsAt >= 100) { letter.update(Math.min(0.25, (nowMs - (ringsAt || nowMs)) / 1000)); ringsAt = nowMs; }
+      timer.update();                                    // time keeps moving, so nothing jumps when it wakes up
+      return;
+    }
+    needFrame = false; stillFrameAt = nowMs;            // one fresh frame, then still again
+  } else if (!hqGraphics && isCalm && nowMs - lastFrameAt < 1000 / 30 - 3) return;   // battery saver: 30 fps while calm
+  lastFrameAt = nowMs;
   lastFrameAt = nowMs;
   timer.update();
   const dt = Math.min(0.1, timer.getDelta());
@@ -624,4 +642,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { pace: () => ({ fingers, sinceTouch: Math.round(performance.now() - touchedAt), dragging: controls.dragging, sailing: !!boat.target, mode: seq.mode, calm: calm(performance.now()) }), THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, clouds, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { pace: () => ({ fingers, sinceTouch: Math.round(performance.now() - touchedAt), dragging: controls.dragging, sailing: !!boat.target, mode: seq.mode, calm: calm(performance.now()), still: !!calmSince && performance.now() - calmSince > 500 }), THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, clouds, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
