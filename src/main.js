@@ -550,7 +550,7 @@ function setGraphics(hq) {
   quality.enabled = hq && params.get('quality') !== 'fixed';
   quality.capped = false; quality.set(quality.max);
   letter.ringInterval = hq ? 0 : 0.1;
-  chats?.setSaver(!hq);                                            // the chat bubble keeps only its drift                             // friends' water rings at ~10 fps in battery saver
+  chats?.setSaver(!hq); document.body.classList.toggle('saver-gfx', !hq);                                            // the chat bubble keeps only its drift                             // friends' water rings at ~10 fps in battery saver
   needFrame = true;
 }
 setGraphics(hqGraphics);
@@ -580,7 +580,7 @@ renderer.setAnimationLoop(() => {
   const nowMs = performance.now(), isCalm = calm(nowMs);
   // battery saver, letter open and flat: the sea stays frozen whatever you do on the letter (typing,
   // tapping, stickers, drawing, voice, choosing a friend); only folding / rolling / sending wakes it
-  const still = !hqGraphics && seq.mode === 'card' && letter.visible;
+  const still = !hqGraphics && ((seq.mode === 'card' && letter.visible) || (seq.mode === 'idle' && chats?.isOpen));   // also behind the chats sheet
   calmSince = still ? (calmSince || nowMs) : 0;
   if (still && nowMs - calmSince > 500) {
     if (!needFrame) {

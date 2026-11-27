@@ -82,6 +82,7 @@ export class Chats {
     root.appendChild(this.el); this.el._owner = this;
     for (const t of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart']) this.el.addEventListener(t, e => e.stopPropagation(), { passive: true });
     this.el.addEventListener('click', e => this._click(e));
+    this._bindSheetDrag();
     this.el.addEventListener('keydown', e => { if (e.key === 'Escape') this.back(); });
     this.stack = [];
     this._badge();
@@ -128,7 +129,7 @@ export class Chats {
 
   /** Tap: the bubble pops in a ring of droplets and the chats open from there. */
   _popOpen() {
-    if (this.reduce) { this.open(); this.el.classList.add('fade-in'); return; }
+    if (this.reduce) { this.open(); this.el.classList.add('fade-in'); setTimeout(() => this.el.classList.remove('fade-in'), 300); return; }
     if (this.btn.classList.contains('popping')) return;
     this.btn.classList.add('popping');
     for (let k = 0; k < 10; k++) {
@@ -139,14 +140,14 @@ export class Chats {
     try { navigator.vibrate?.(8); } catch {}
     const r = this.btn.getBoundingClientRect();
     this.el.style.setProperty('--ox', (r.left + r.width / 2) + 'px'); this.el.style.setProperty('--oy', (r.top + r.height / 2) + 'px');
-    setTimeout(() => { this.btn.classList.remove('popping'); this.open(); this.el.classList.add('from-bubble'); }, 190);   // the page grows out of the bubble
+    setTimeout(() => { this.btn.classList.remove('popping'); this.open(); this.el.classList.add('from-bubble'); setTimeout(() => this.el.classList.remove('from-bubble'), 420); }, 190);   // the page grows out of the bubble
   }
 
 
   open(page = 'list', arg) {
     this.el.hidden = false; this.btn.hidden = true;
     document.body.classList.add('chats-open');
-    this.stack = [];
+    this.stack = []; this.sheetFull = false;
     this.go(page, arg, true);
     this.onOpenChange?.(true);
   }
@@ -172,6 +173,30 @@ export class Chats {
     if (this.stack.length <= 1) { this.close(); return; }
     this.stack.pop();
     this._render(false);
+  }
+
+  /** Drag the sheet by its handle (or the list's title bar): up for the full height, down to close. */
+  _bindSheetDrag() {
+    let d = null;
+    this.el.addEventListener('pointerdown', e => {
+      const h = e.target.closest('.c-grab, .c-top'); if (!h || e.target.closest('button')) return;
+      const sh = this.el.querySelector('.c-sheet'); if (!sh) return;
+      d = { id: e.pointerId, y: e.clientY, sh, h: sh.getBoundingClientRect().height };
+      sh.style.transition = 'none';
+    });
+    window.addEventListener('pointermove', e => {                     // (capture: the chats layer stops moves from bubbling)
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y;
+      d.sh.style.transform = `translateY(${dy > 0 ? dy : dy * 0.35}px)`;   // upward pull gives a little resistance
+    }, true);
+    const up = e => {
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y, sh = d.sh; d = null;
+      sh.style.transition = ''; sh.style.transform = '';
+      if (dy > Math.min(160, sh.getBoundingClientRect().height * 0.3)) { if (sh.classList.contains('full') && this.stack.at(-1).page === 'list') { this.sheetFull = false; sh.classList.remove('full'); } else this.close(); }
+      else if (dy < -50) { this.sheetFull = true; sh.classList.add('full'); }
+    };
+    window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', up, true);
   }
 
   /** Someone opened the app through your friend's invite link (…/?invite=CODE). */
@@ -236,8 +261,16 @@ export class Chats {
   _render(forward) {
     const { page, arg } = this.stack.at(-1);
     const html = { list: () => this._list(), group: () => this._group(), add: () => this._add(), thread: () => this._thread(arg), scan: () => this._scan() }[page]();
-    this.el.className = 'chats page-' + page;
-    this.el.innerHTML = `<div class="c-page ${forward == null ? '' : forward ? 'in-fwd' : 'in-back'}">${html}</div>`;
+    const anim = forward == null ? '' : forward ? 'in-fwd' : 'in-back';
+    // the list and the threads sit in a frosted glass sheet over the live ocean (tap the sea above it,
+    // or drag the handle down, to close; drag it up for the full height); the rest are full pages
+    const sheet = page === 'list' || page === 'thread';
+    this.el.className = 'chats page-' + page + (sheet ? ' sheet-mode' : '');
+    this.el.innerHTML = sheet
+      ? `<div class="c-sky" data-act="dismiss" aria-hidden="true"></div>
+         <div class="c-sheet${page === 'thread' || this.sheetFull ? ' full' : ''}${forward === true && this.stack.length === 1 ? ' rise' : ''}">
+           <div class="c-grab" aria-hidden="true"><i></i></div><div class="c-page ${anim}">${html}</div></div>`
+      : `<div class="c-page ${anim}">${html}</div>`;
     if (page === 'add') this._drawQR();
     if (page === 'scan') this._startScan();
     if (page === 'thread') { const m = this.el.querySelector('.c-msgs'); if (m) m.scrollTop = m.scrollHeight; }
@@ -256,14 +289,14 @@ export class Chats {
         <p class="c-eyebrow">In the air</p>
         <div class="c-air">
           <button type="button" class="c-air-item" data-act="group"><span class="c-ring">${`<span class="c-av c-groups">${IC.group}</span>`}</span><span class="c-air-name muted">Groups</span></button>
-          ${air.map(f => `<button type="button" class="c-air-item" data-chat="${f.id}"><span class="c-ring live">${avatar(f)}</span><span class="c-air-name">${esc(f.name)}</span></button>`).join('')}
+          ${air.map((f, i) => `<button type="button" class="c-air-item" data-chat="${f.id}" style="--d:${(-(i + 1) * 0.9).toFixed(1)}s"><span class="c-ring live">${avatar(f)}<i class="c-up"></i><i class="c-up b"></i></span><span class="c-air-name">${esc(f.name)}</span></button>`).join('')}
         </div>
         <div class="c-list">
-          ${this._chats().map(c => `
-            <button type="button" class="c-row" data-chat="${c.id}">
+          ${this._chats().map((c, i) => `
+            <button type="button" class="c-row" data-chat="${c.id}" style="--i:${i}">
               ${c.kind === 'group' ? `<span class="c-stack">${c.who.slice(0, 2).map(p => avatar(p, 'sm')).join('')}</span>` : avatar(c.who[0])}
               <span class="c-mid"><span class="c-name">${esc(c.name)}</span><span class="c-line${c.unread ? ' new' : ''}">${esc(c.line)}</span></span>
-              <span class="c-when">${ago(c.at)}</span>
+              <span class="c-end"><span class="c-when">${ago(c.at)}</span>${c.unread ? `<span class="c-dot">${c.unread > 99 ? '99+' : c.unread}</span>` : ''}</span>
             </button>`).join('')}
           ${req.map(r => `
             <div class="c-row pending"><span class="c-av c-lock">${IC.lock}</span>
@@ -363,7 +396,8 @@ export class Chats {
     if (chat) { this.go('thread', chat.dataset.chat); return; }
     if (!a) return;
     const act = a.dataset.act;
-    if (act === 'back') this.back();
+    if (act === 'dismiss') this.close();
+    else if (act === 'back') this.back();
     else if (act === 'home') this.close();
     else if (act === 'add') this.go('add');
     else if (act === 'group') this.go('group');
