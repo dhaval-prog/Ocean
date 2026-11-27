@@ -131,7 +131,7 @@ export class SinkSequence {
     if (this.mode !== 'idle' || !this.boat.ready) return;
     this.boat.frozen = true;
     this._now = performance.now();                       // the clock starts at the tap itself
-    this._flatten(); this.bottle.visible = false;
+    this._flatten(); this.bottle.visible = false; this.shapeS = 0; this._shapeTarget = null;
     this.spot = new V3(this.boat.position.x, this.ocean.base, this.boat.position.y);
     this._lastRip = -1;
     this.setMode('sink');
@@ -139,6 +139,36 @@ export class SinkSequence {
 
   /** Throw the paper back (button), with a default toss away from the camera. */
   throwBack() { this.send('plane'); }
+
+  // --- shaping by hand (a letter with something on it) ------------------------------
+  // shapeS: −1 = rolled up inside a bottle … 0 = the flat letter … +1 = folded into a paper plane.
+  // The letter drives it with the finger (setShapeS), lets it settle (snapShape) and throws it (throwShape).
+
+  /** Start shaping from the flat letter (card). */
+  beginShape() {
+    if (this.mode !== 'card') return false;
+    this.shapeS = 0; this._shapeTarget = null;
+    this.setMode('shaping');
+    return true;
+  }
+
+  setShapeS(v) { this.shapeS = Math.max(-1, Math.min(1, v)); this._shapeTarget = null; }
+
+  /** Glide to −1, 0 or +1; back at 0 it is the flat letter again. */
+  snapShape(target) { this._shapeTarget = target; }
+
+  /** Throw the fully folded plane (+1) or the bottle (−1). */
+  throwShape() {
+    if (this.mode !== 'shaping') return;
+    const P = this.paper;
+    this._fromP = P.position.clone(); this._fromQ = P.quaternion.clone(); this._planeEnd = null;
+    if (this.shapeS >= 0.99) { this.sendKind = 'plane'; this._shape('plane', 1); this.setMode('plane'); }
+    else if (this.shapeS <= -0.99) {
+      this.sendKind = 'bottle'; this._splashed = false; this._shape('bottle', 1);
+      this.bottle.visible = true; this.bottle.scale.setScalar(1);
+      this.setMode('bottle', this._now - 0.15 * DUR.bottle * 1000);          // already in its bottle: straight to the throw
+    }
+  }
 
   /** Send the letter: 'plane' (flies to the contact's circle) or 'bottle' (drops into the sea). Starts with the wax seal. */
   send(kind = 'plane') {
@@ -345,6 +375,28 @@ export class SinkSequence {
       const local = this._vel.clone().applyQuaternion(tg.q.clone().invert());
       P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-local.y * 0.05, local.x * 0.05, -local.x * 0.03)));
       this._bend(t, Math.min(0.5, this._vel.length() * 0.04));
+    } else if (this.mode === 'shaping') {
+      // folded / rolled by hand: the shape follows shapeS; a little lift as a plane, a dip toward the bottle
+      if (this._shapeTarget != null) {
+        const d = this._shapeTarget - this.shapeS;
+        this.shapeS += d * Math.min(1, dt * 9);
+        if (Math.abs(d) < 0.004) {
+          this.shapeS = this._shapeTarget; this._shapeTarget = null;
+          if (this.shapeS === 0) { this._flatten(); this.bottle.visible = false; this.setMode('card'); return; }
+        }
+      }
+      const sv = this.shapeS, tg = this._cardTarget(), sw = Math.sin(t * 1.1) * (1 - Math.abs(sv) * 0.6);
+      const up = new V3(0, 1, 0).applyQuaternion(tg.q);
+      P.position.copy(tg.p).addScaledVector(up, sw * 0.05 + (sv > 0 ? 0.25 * sv : 0.12 * sv));
+      P.quaternion.copy(tg.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sw * 0.03, Math.sin(t * 0.9) * 0.04 * (1 - Math.abs(sv)), sv > 0 ? Math.sin(t * 1.4) * 0.05 * sv : 0)));
+      const Bt = this.bottle;
+      if (sv > 0) { this._shape('plane', ease(sv)); Bt.visible = false; }
+      else if (sv < 0) {
+        const roll = Math.min(1, -sv / 0.72), close = Math.max(0, (-sv - 0.72) / 0.28);   // roll up, then the bottle closes round it
+        this._shape('bottle', ease(roll));
+        Bt.visible = close > 0;
+        if (Bt.visible) { Bt.scale.setScalar(Math.max(0.01, backOut(close))); Bt.position.copy(P.position); Bt.quaternion.copy(P.quaternion); this._glass().opacity = 0.38; }
+      } else { this._bendCard(t); Bt.visible = false; }
     } else if (this.mode === 'fold') {
       // fold into a paper plane, or roll up into a scroll
       const k = ease(Math.min(1, t / DUR.fold)), up = new V3(0, 1, 0).applyQuaternion(this.camera.quaternion);
