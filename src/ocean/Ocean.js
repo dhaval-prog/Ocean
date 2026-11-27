@@ -93,7 +93,7 @@ export class Ocean {
     this.timeName = 'Day';
     this.look = { petals: 0, specks: 0, glints: 0, night: 0 };
     this._ripple = 0;
-    this._tmp = new THREE.Color();
+    this._tmp = new THREE.Color(); this._tmp2 = new THREE.Color();
     this.fogTint = new THREE.Color('#dfe6ea');
     this.style = 'deep';
     this.setTimeOfDay(1);
@@ -104,7 +104,12 @@ export class Ocean {
     const n = TIMES.length; f = ((f % n) + n) % n;
     const i = Math.floor(f), j = (i + 1) % n, k = f - i, e = sm(k);
     const U = this.uniforms;
-    const A = stylePalette(TIMES[i].pal, this.style, TIMES[i].light), B = stylePalette(TIMES[j].pal, this.style, TIMES[j].light);
+    let A = stylePalette(TIMES[i].pal, this.style, TIMES[i].light), B = stylePalette(TIMES[j].pal, this.style, TIMES[j].light);
+    if (this._fromStyle && this._styleK < 1) {                         // fading from the previous ocean colour
+      const s = sm(this._styleK), mix = (P0, P1) => P1.map((v, m) => this._tmp.set(P0[m]).lerp(this._tmp2.set(v), s).getHex());
+      A = mix(stylePalette(TIMES[i].pal, this._fromStyle, TIMES[i].light), A);
+      B = mix(stylePalette(TIMES[j].pal, this._fromStyle, TIMES[j].light), B);
+    }
     U.uPalA.value.forEach((c, m) => c.set(A[m]));
     U.uPalB.value.forEach((c, m) => c.set(B[m]));
     U.uFxA.value.set(...TIMES[i].fx); U.uFxB.value.set(...TIMES[j].fx);
@@ -126,8 +131,11 @@ export class Ocean {
   }
 
   /** Ocean colour style: 'deep' (default), 'tropical', 'nordic' or 'pastel'. */
-  setStyle(id) {
-    this.style = STYLES[id] ? id : 'deep';
+  setStyle(id, fade = 0) {
+    id = STYLES[id] ? id : 'deep';
+    if (id === this.style) return;
+    if (fade > 0) { this._fromStyle = this.style; this._styleK = 0; this._styleRate = 1 / fade; } else this._fromStyle = null;
+    this.style = id;
     this.setTimeOfDay(this.timeOfDay);
   }
 
@@ -149,6 +157,11 @@ export class Ocean {
 
   update(dt, elapsed) {
     const U = this.uniforms;
+    if (this._fromStyle) {                                             // an ocean colour fade in progress
+      this._styleK = Math.min(1, this._styleK + dt * this._styleRate);
+      if (this._styleK >= 1) this._fromStyle = null;
+      this.setTimeOfDay(this.timeOfDay);
+    }
     U.uTime.value = elapsed;
     U.uStorm.value = this.storm;
     U.uFoam.value = this.foam;
