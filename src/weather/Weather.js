@@ -54,14 +54,24 @@ export class Weather {
     this.onChange = null;           // name / status changed (for the panel)
   }
 
-  get rate() { return this.mode === 'manual' ? 1 / 2.5 : 1 / 25; }   // 1 / seconds to settle
+  get rate() { return this.mode === 'manual' ? 1 / 2.5 : this.mode === 'cycle' ? 1 / 12 : 1 / 25; }   // 1 / seconds to settle
 
   setMode(mode) {
     this.mode = mode;
     clearInterval(this._localTimer); this._localTimer = null;
     if (mode === 'auto') { this._autoLeft = 0; this.status = 'Changes by itself every few minutes'; }
+    else if (mode === 'cycle') { this._cycleId = null; this.status = 'Follows the 2-hour cycle: clear, cloudy, rain, storm, fog in each time of day'; }
     else if (mode === 'local') this._startLocal();
     else { this.status = 'Pick a weather above'; if (this.preset !== 'custom') this.setPreset(this.preset); }
+    this.onChange?.();
+  }
+
+  /** 2-hour cycle: switch to the weather the cycle has now (see Clock.cycleWeather). */
+  followCycle(id) {
+    if (this.mode !== 'cycle' || id === this._cycleId || !PRESETS[id]) return;
+    this._cycleId = id; this.preset = id;
+    Object.assign(this.target, PRESETS[id]);
+    this.name = PRESETS[id].name;
     this.onChange?.();
   }
 
