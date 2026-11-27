@@ -961,3 +961,7 @@ body.saver-gfx .chats.unswarming .c-bub .c-swarm { animation-duration: 0.3s; }
 .chats.kb .c-sheet .c-page { padding-bottom: 0; }
 .chats.kb .c-compose { margin-bottom: 6px; }
 .chats .c-lpaper .c-round { color: #1b2113; background: #fff; box-shadow: 0 3px 10px rgba(0, 20, 50, 0.3); }
+
+/* chat button: a dark-blue rounded square, white icon; a white badge with a black number */
+.chats-btn .cb-solid { border-radius: 20px; }
+.chats-btn .badge { background: #fff; color: #111; border: 2px solid #1d3a8a; box-shadow: 0 2px 6px rgba(10, 25, 70, 0.35); }
