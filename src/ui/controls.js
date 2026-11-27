@@ -26,7 +26,7 @@ const MODES = [
   { id: 'manual', name: 'Manual', hint: 'Pick a time below' },
 ];
 
-export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, onWeatherMode, onPreset, onStorm, onFoam, onClouds, onGlitter, onReef }) {
+export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, onWeatherMode, onPreset, onStorm, onFoam, onClouds, onGlitter, onReef, onGraphics }) {
   panel.innerHTML = `
     <div class="panel-head">
       <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="currentColor"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0z" fill="currentColor"/></svg></span>
@@ -67,6 +67,10 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, o
       <div class="row head"><span class="eyebrow">Glitter</span><span class="hint">Less → More</span></div>
       <input type="range" min="0" max="1" step="0.01" data-glitter aria-label="Glitter amount">
       <label class="check"><input type="checkbox" data-reef> Reef shallows</label>
+      <div class="divider"></div>
+      <div class="row head"><span class="eyebrow">Graphics</span><span class="value" data-gfx-label></span></div>
+      <label class="check gfx"><input type="checkbox" switch data-gfx> High-quality graphics</label>
+      <div class="hint" data-gfx-hint></div>
     </div>`;
 
   const $ = s => panel.querySelector(s);
@@ -126,6 +130,15 @@ export function createControls(panel, { initial, onTimeOfDay, onMode, onStyle, o
   };
   glitter.addEventListener('input', () => onGlitter(+glitter.value));
   reef.addEventListener('change', () => onReef(reef.checked));
+  // graphics: high quality, or a battery saver that keeps the phone smooth and cool
+  const gfx = $('[data-gfx]'), gfxLabel = $('[data-gfx-label]'), gfxHint = $('[data-gfx-hint]');
+  const setGraphics = hq => {
+    gfx.checked = hq; gfxLabel.textContent = hq ? 'High' : 'Battery saver';
+    gfxHint.textContent = hq ? 'Sharpest picture and smoothest edges. Uses more battery and can warm the phone.'
+      : 'Lower 3D resolution, no extra edge smoothing, 30 fps while nothing is moving fast. Smoother and cooler on phones; text stays sharp.';
+  };
+  setGraphics(initial.graphics !== false);
+  gfx.addEventListener('change', () => { setGraphics(gfx.checked); onGraphics?.(gfx.checked); });
 
   return {
     setTimeOfDay(v, name) { slider.value = v; setLabel(name); },

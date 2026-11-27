@@ -30,8 +30,12 @@ const params = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });
 // Same sharpness on phones as on desktop: up to 2x (a 3x phone screen gains
 // almost nothing visible above 2x, but would cost over twice the pixels).
+// Graphics setting: 'high' (default) or 'saver' (battery saver: lower 3D resolution, no MSAA,
+// 30 fps while nothing moves fast). The letter, buttons and circles are HTML, so they stay sharp.
+let hqGraphics = (() => { try { return localStorage.getItem('ocean.graphics') !== 'saver'; } catch { return true; } })();
+const SAVER_DPR = 1.25;
 const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
-let pixelRatio = maxDpr;
+let pixelRatio = hqGraphics ? maxDpr : Math.min(maxDpr, SAVER_DPR);
 renderer.setPixelRatio(pixelRatio);
 renderer.domElement.className = 'scene';
 app.prepend(renderer.domElement);
@@ -286,7 +290,7 @@ function showTod() {
   ui.setTimeOfDay(ocean.timeOfDay, name);
 }
 const ui = createControls(document.getElementById('panel'), {
-  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef },
+  initial: { tod: state.tod, mode: state.mode, style: state.style, storm: weather.cur.storm, foam: weather.cur.foam, clouds: weather.cur.clouds, glitter: ocean.glitter, reef: ocean.reef, graphics: hqGraphics },
   onTimeOfDay: v => { state.tod = v; state.mode = 'manual'; if (weather.mode === 'cycle') weather.setMode('auto'); ocean.setTimeOfDay(v); applyLook(); saveTod(); },
   onMode: m => {
     state.mode = m;
@@ -307,6 +311,7 @@ const ui = createControls(document.getElementById('panel'), {
   onClouds: v => weather.tweak('clouds', v),
   onGlitter: v => { ocean.glitter = v; },
   onReef: v => { ocean.reef = v; },
+  onGraphics: hq => setGraphics(hq),
 });
 ocean.style = state.style;
 ocean.setTimeOfDay(state.tod);
@@ -496,9 +501,28 @@ const ro = new ResizeObserver(resize); ro.observe(app); ro.observe(renderer.domE
 resize();
 
 const quality = new AutoQuality({
-  min: Math.min(1, maxDpr), max: maxDpr, start: maxDpr, enabled: params.get('quality') !== 'fixed',
+  min: Math.min(1, maxDpr), max: maxDpr, start: pixelRatio, enabled: params.get('quality') !== 'fixed',
   onChange: v => { pixelRatio = v; applySize(); },
 });
+function setGraphics(hq) {
+  hqGraphics = hq;
+  try { localStorage.setItem('ocean.graphics', hq ? 'high' : 'saver'); } catch {}
+  post.setSamples(hq ? 4 : 0);                                    // edge smoothing (MSAA) only in high quality
+  quality.max = hq ? maxDpr : Math.min(maxDpr, SAVER_DPR);        // battery saver: a fixed, lower 3D resolution
+  quality.enabled = hq && params.get('quality') !== 'fixed';
+  quality.capped = false; quality.set(quality.max);
+}
+setGraphics(hqGraphics);
+// battery saver: 30 fps while nothing moves fast (calm sea, writing, reading); 60 while a finger
+// is down or anything is flying, folding, sinking or sailing
+let fingers = 0, touchedAt = 0;
+addEventListener('pointerdown', () => { fingers++; touchedAt = performance.now(); }, true);
+addEventListener('pointerup', () => { fingers = Math.max(0, fingers - 1); touchedAt = performance.now(); }, true);
+addEventListener('pointercancel', () => { fingers = Math.max(0, fingers - 1); }, true);
+addEventListener('keydown', () => { touchedAt = performance.now(); }, true);
+const calm = now => fingers === 0 && now - touchedAt > 600 && !controls.dragging && !boat.target
+  && (seq.mode === 'idle' || seq.mode === 'card' || (seq.mode === 'shaping' && seq._shapeTarget == null));
+let lastFrameAt = 0;
 
 // --- loop -----------------------------------------------------------------------
 const timer = new THREE.Timer();
@@ -507,6 +531,9 @@ let elapsed = 0, glowTimer = 0, dropTimer = 1, wxSyncAt = 0, ringColAt = 0;
 const ringTmp = new THREE.Color();
 const lookWx = { glints: 0, petals: 0, specks: 0 }, windVec = [0, 0], bowPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
+  const nowMs = performance.now();
+  if (!hqGraphics && calm(nowMs) && nowMs - lastFrameAt < 1000 / 30 - 3) return;   // skip this frame entirely
+  lastFrameAt = nowMs;
   timer.update();
   const dt = Math.min(0.1, timer.getDelta());
   elapsed += dt;
@@ -597,4 +624,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for upcoming game / chat layers and for debugging in the console.
-window.oceanApp = { THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, clouds, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };
+window.oceanApp = { pace: () => ({ fingers, sinceTouch: Math.round(performance.now() - touchedAt), dragging: controls.dragging, sailing: !!boat.target, mode: seq.mode, calm: calm(performance.now()) }), THREE, scene, camera, controls, renderer, ocean, weather, rain, spray, lightning, hail, spout, sparkles, clouds, spawnSpout, spawnBeam, beams, boat, marker, smoke, seq, letter, particles, post, ambience, quality };

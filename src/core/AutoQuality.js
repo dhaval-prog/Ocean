@@ -14,6 +14,7 @@ export class AutoQuality {
   tick(dt) {
     if (!this.enabled) return;
     if (this.warmup > 0) { this.warmup -= dt; return; }
+    if (this.capped && (this.cappedFor -= dt) <= 0) this.capped = false;
     this.frames++; this.time += dt;
     if (this.time < 1.5) return;
     const fps = this.frames / this.time;
@@ -22,7 +23,7 @@ export class AutoQuality {
     if (this.pending) {
       const { from, fps: before } = this.pending;
       this.pending = null;
-      if (fps < before * 1.12) { this.capped = true; this.set(from); return; } // no gain: frame rate is capped, not GPU-bound
+      if (fps < before * 1.12) { this.capped = true; this.cappedFor = 30; this.set(from); return; } // no gain: frame rate is capped, not GPU-bound (try again in 30 s: a hot phone changes)
     }
     if (fps < 40) {
       // two slow windows in a row before giving up sharpness (ignores one-off hitches like model loading)
